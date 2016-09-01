@@ -17,9 +17,9 @@ gorqlite should be considered alpha until more testers share their experiences.
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
 * Only a single node needs to be specified in the connection.  gorqlite will talk to it and figure out the rest of the cluster from its redirects and status API.
 * Support for several rqlite-specific operations:
-** `Leader()` and `Peers() to examine the cluster.
-** `SetConsistencyLevel() can be called at any time on a connection to change the consistency level for future operations.
-** `Timing()` can be called on a per-result basis to retrieve the timings information for executed operations as float64, per the rqlite API. 
+  * `Leader()` and `Peers() to examine the cluster.
+  * `SetConsistencyLevel() can be called at any time on a connection to change the consistency level for future operations.
+  * `Timing()` can be called on a per-result basis to retrieve the timings information for executed operations as float64, per the rqlite API. 
 * `Trace(io.Writer)`/`Trace(nil)` can be used to turn on/off debugging information on everything gorqlite does to a io.Writer of your choice.
 * No external dependencies. Uses only standard library functions.
 
