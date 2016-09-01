@@ -1,12 +1,14 @@
-# gorqlite - A Go client for rqlite, the distributed consistent sqlite.
+# gorqlite - a golang client for rqlite
 
-gorqlite is a golang client for rqlite that abstracts API interactions into a stateful connection.
+gorqlite is a golang client for rqlite that provides easy-to-use abstrations for working with the rqlite API.
 
-It is not a database/sql driver (read below for why this is impossible) but instead provides similar abstractions, such as `Next()`/`Scan()`, `Open()`/`Exec()`/`Close()`, etc.  Additionally, many rqlite-specific features are implemented.
+It is not a database/sql driver (read below for why this is impossible) but instead provides similar semantics, such as `Open()` and `Close()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`, and also reading the row as a `Map()`, `Write()` and `WriteOne()`, etc.
+
+rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://github.com/rqlite/rqlite).
 
 ## Status
 
-gorqlite should be considered alpha until more testers share their experiences.
+gorqlite should be considered alpha until more testers share their experiences.  See TODO below.
 
 ## Features
 
@@ -152,11 +154,11 @@ The chief reasons a proper database/sql driver is not possible are:
 
 ## Other Design Notes
 
-In `database/sql`, `Open() doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
+In `database/sql`, `Open()` doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
 
 Just like `database/sql` connections, a gorqlite connection is not threadsafe.  
 
-`Close()` will set a flag so if you try to use the connection afterwards, it will fail.  But otherwise, you can merrily let your connections be garbage-collected with no harm, because they're just configuration tracking bundles and everything to the rqlite cluster is stateless.  Indeed, the true reason that `Close() exists is the author's feeling that if you open something, you should be able to close it.  So why not `GetConnection()` then instead of `Open()`?  Or `GetClusterConfigurationTrackingObject()`?  I don't know.  Fork me.
+`Close()` will set a flag so if you try to use the connection afterwards, it will fail.  But otherwise, you can merrily let your connections be garbage-collected with no harm, because they're just configuration tracking bundles and everything to the rqlite cluster is stateless.  Indeed, the true reason that `Close()` exists is the author's feeling that if you open something, you should be able to close it.  So why not `GetConnection()` then instead of `Open()`?  Or `GetClusterConfigurationTrackingObject()`?  I don't know.  Fork me.
 
 `Leader()` and `Peers()` will both cause gorqlite to reverify its cluster information before return.  Note that if you call `Leader()` and then `Peers()` and something changes in between, it's possible to get inconsistent answers.
 
