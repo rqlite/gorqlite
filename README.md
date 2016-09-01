@@ -2,7 +2,7 @@
 
 gorqlite is a golang client for rqlite that provides easy-to-use abstrations for working with the rqlite API.
 
-It is not a database/sql driver (read below for why this is impossible) but instead provides similar semantics, such as `Open()` and `Close()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`, and also reading the row as a `Map()`, `Write()` and `WriteOne()`, etc.
+It is not a database/sql driver (read below for why this is impossible) but instead provides similar semantics, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
 rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://github.com/rqlite/rqlite).
 
@@ -19,8 +19,8 @@ gorqlite should be considered alpha until more testers share their experiences. 
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
 * Only a single node needs to be specified in the connection.  gorqlite will talk to it and figure out the rest of the cluster from its redirects and status API.
 * Support for several rqlite-specific operations:
-  * `Leader()` and `Peers() to examine the cluster.
-  * `SetConsistencyLevel() can be called at any time on a connection to change the consistency level for future operations.
+  * `Leader()` and `Peers()` to examine the cluster.
+  * `SetConsistencyLevel()` can be called at any time on a connection to change the consistency level for future operations.
   * `Timing()` can be called on a per-result basis to retrieve the timings information for executed operations as float64, per the rqlite API. 
 * `Trace(io.Writer)`/`Trace(nil)` can be used to turn on/off debugging information on everything gorqlite does to a io.Writer of your choice.
 * No external dependencies. Uses only standard library functions.
@@ -148,7 +148,7 @@ The chief reasons a proper database/sql driver is not possible are:
 
 * The statement parsing/preparation API is not exposed at the SQL layer by sqlite, and hence it's not exposed by rqlite.  What this means is that there's no way to prepare a statement (`"INSERT INTO superheroes (?,?)"`) and then later bind executions to it.  (In case you're wondering, yes, it would be possible for gorqlite to include a copy of sqlite3 and use its engine, but the sqlite C call to `sqlite3_prepare_v2()` will fail because a local sqlite3 won't know your DB's schemas and the `sqlite3_prepare_v2()` call validates the statement against the schema.  We could open the local sqlite .db file maintained by rqlite and validate against that, but there is no way to make a consistency guarantee between time of preparation and execution, especially since the user can mix DDL and DML in a single transaction).
 
-* So we've turned off `Begin()`, `Rollback()`, and `Commit(), and now we need to turn off `Prepare()`.
+* So we've turned off `Begin()`, `Rollback()`, and `Commit()`, and now we need to turn off `Prepare()`.
 
 * As a consequence, there is no point in having statements, so they are unsupported.  At this point, so much of the `database/sql` API is returning `errors.New("NOT IMPLEMENTED")` that we might as well use an rqlite-specific library.
 
