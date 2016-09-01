@@ -34,20 +34,23 @@ gorqlite should be considered alpha until more testers share their experiences. 
 // these URLs are just generic database URLs, not rqlite API URLs,
 // so you don't need to worry about the various rqlite paths ("/db/query"), etc.
 // just supply the base url and not "db" or anything after it.
-// note that you cannot specify a database name in the URL (this is sqlite, after all).
 
-conn, err := gorqlite.Open("rqlite,"http://") // connects to localhost on 4001 without auth
-conn, err := gorqlite.Open("rqlite,"https://") // same but with https
-conn, err := gorqlite.Open("rqlite","https://localhost:4001/") // same only explicitly
+// yes, you need the http or https
+
+// no, you cannot specify a database name in the URL (this is sqlite, after all).
+
+conn, err := gorqlite.Open("http://") // connects to localhost on 4001 without auth
+conn, err := gorqlite.Open("https://") // same but with https
+conn, err := gorqlite.Open("https://localhost:4001/") // same only explicitly
 
 // with auth:
-conn, err := sql.Open("rqlite","https://mary:secret2@localhost:4001/")
+conn, err := sql.Open("https://mary:secret2@localhost:4001/")
 // different server, setting the rqlite consistency level
-conn, err := sql.Open("rqlite,"https://mary:secret2@server1.example.com:4001/?level=none")
+conn, err := sql.Open("https://mary:secret2@server1.example.com:4001/?level=none")
 // same without auth, setting the rqlite consistency level
-conn, err := sql.Open("rqlite,"https://server2.example.com:4001/?level=weak")
+conn, err := sql.Open("https://server2.example.com:4001/?level=weak")
 // different port, setting the rqlite consistency level and timeout
-conn, err := sql.Open("rqlite,"https://localhost:2265/?level=strong&timeout=30")
+conn, err := sql.Open("https://localhost:2265/?level=strong&timeout=30")
 
 // change our minds
 conn.SetConsistencyLevel("none")
@@ -65,18 +68,29 @@ statements = append(statements,fmt.Sprintf(pattern,125718,"Speed Gibson","Speed"
 statements = append(statements,fmt.Sprintf(pattern,209166,"Clint Barlow","Clint"))
 statements = append(statements,fmt.Sprintf(pattern,44107,"Barney Dunlap","Barney"))
 results, err := conn.Write(statements)
-fmt.Printf("affected %d rows\n",results.NumRows)
+
+// now we have an array of []WriteResult 
+
+for n, v := range WriteResult {
+	fmt.Printf("for result %d, %d rows were affected\n",n,v.RowsAffected)
+	if ( v.Err != nil ) {
+		fmt.Printf("   we have this error: %s\n",v.Err.Error())
+	}
+}
 
 // or if we have an auto_increment column
-res, err := conn.Write("INSERT INTO foo (name) values ('bar')")
+res, err := conn.WriteOne("INSERT INTO foo (name) values ('bar')")
 fmt.Printf("last insert id was %d\n",res.LastInsertID)
+
+// just like database/sql, you're required to Next() before any Scan() or Map()
 
 // note that rqlite is only going to send JSON types - see the encoding/json docs
 // which means all numbers are float64s.  gorqlite will convert to int64s for you
 // because it is convenient but other formats you will have to handle yourself
+
 var id int64
 var name string
-rows, err := conn.Query("select id, name from secret_agents where id > 500")
+rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
 fmt.Printf("query returned %d rows\n",rows.NumRows)
 for rows.Next() {
 	err := response.Scan(&id, &name)
@@ -84,7 +98,12 @@ for rows.Next() {
 	fmt.Printf("there are %d rows overall%d\n",response.NumRows)
 }
 
-// alternatively
+// just like WriteOne()/Write(), QueryOne() takes a single statement,
+// while Query() takes a []string.  You'd only use Query() if you wanted
+// to transactionally group a bunch of queries, and then you'd get back
+// a []QueryResult
+
+// alternatively, use Next()/Map()
 
 for rows.Next() {
 	m, err := response.Map()
@@ -94,9 +113,12 @@ for rows.Next() {
 }
 
 // get rqlite cluster information
-fmt.Println("current leader is",conn.Leader())
-for peer := range conn.Peers() {
-	fmt.Println("cluster peer:",peer)
+leader, err := conn.Leader()
+// err could be set if the cluster wasn't answering, etc.
+fmt.Println("current leader is"leader)
+peers, err := conn.Peers()
+for n, p := range peers {
+	fmt.Printf("cluster peer %d: %s\n",n,p)
 }
 
 // turn on debug tracing to the io.Writer of your choice.
