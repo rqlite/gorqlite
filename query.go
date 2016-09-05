@@ -159,8 +159,8 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		// did we get an error?
 		_, ok := thisResult["error"]
 		if ok {
-			trace("%s: have an error this this result: %s",conn.ID,thisResult["error"].(string))
-			thisQR.Err = err
+			trace("%s: have an error on this result: %s",conn.ID,thisResult["error"].(string))
+			thisQR.Err = errors.New(thisResult["error"].(string))
 			results = append(results,thisQR)
 			numStatementErrors++
 			continue
