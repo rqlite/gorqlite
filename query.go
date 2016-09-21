@@ -159,15 +159,15 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		// did we get an error?
 		_, ok := thisResult["error"]
 		if ok {
-			trace("%s: have an error this this result: %s",conn.ID,thisResult["error"].(string))
-			thisQR.Err = err
+			trace("%s: have an error on this result: %s",conn.ID,thisResult["error"].(string))
+			thisQR.Err = errors.New(thisResult["error"].(string))
 			results = append(results,thisQR)
 			numStatementErrors++
 			continue
 		}
 
 		// time is a float64
-		thisQR.timing = thisResult["time"].(float64)
+		thisQR.Timing = thisResult["time"].(float64)
 
 		// column & type are an array of strings
 		c := thisResult["columns"].([]interface{})
@@ -186,7 +186,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 
 		thisQR.rowNumber = -1
 
-		trace("%s: this result (#col,time) %d %f",conn.ID,len(thisQR.columns),thisQR.timing)
+		trace("%s: this result (#col,time) %d %f",conn.ID,len(thisQR.columns),thisQR.Timing)
 		results = append(results,thisQR)
 	}
 
@@ -221,7 +221,7 @@ type QueryResult struct {
 	Err error
 	columns []string
 	types []string
-	timing float64
+	Timing float64
 	values []interface{}
 	rowNumber int64
 }
@@ -394,15 +394,3 @@ func (qr *QueryResult) Types() []string {
 	return qr.types
 }
 
-/* *****************************************************************
-
-   method: QueryResult.Timing()
-
- * *****************************************************************/
-
-/*
-Timing() returns this QueryResult's execution time, as reported by rqlite.
-*/
-func (qr *QueryResult) Timing() float64 {
-	return qr.timing
-}

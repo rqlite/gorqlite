@@ -127,8 +127,8 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 		// did we get an error?
 		_, ok := thisResult["error"]
 		if ok {
-			trace("%s: have an error this this result: %s",conn.ID,thisResult["error"].(string))
-			thisWR.Err = err
+			trace("%s: have an error on this result: %s",conn.ID,thisResult["error"].(string))
+			thisWR.Err = errors.New(thisResult["error"].(string))
 			results = append(results,thisWR)
 			numStatementErrors += 1
 			continue
