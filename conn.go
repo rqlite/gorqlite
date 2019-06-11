@@ -35,13 +35,13 @@ var wantsTrace bool
 /*
 	The connection abstraction.	 Note that since rqlite is stateless,
 	there really is no "connection".  However, this type holds
-	information such as the current leader, peers, connection 
+	information such as the current leader, peers, connection
 	string to build URLs, etc.
 
 	Connections are assigned a "connection ID" which is a pseudo-UUID
 	for connection identification in trace output only.  This helps
 	sort out what's going on if you have multiple connections going
-	at once.  It's generated using a non-standards-or-anything-else-compliant 
+	at once.  It's generated using a non-standards-or-anything-else-compliant
 	function that uses crypto/rand to generate 16 random bytes.
 
 	Note that the Connection objection holds info on all peers, gathered
@@ -49,23 +49,22 @@ var wantsTrace bool
 */
 
 type Connection struct {
-
 	cluster rqliteCluster
 
 	/*
-  name               type                default
-  */
+	  name               type                default
+	*/
 
-	username           string              //   username or ""
-	password           string              //   username or ""
-	consistencyLevel   consistencyLevel    //   WEAK
-	wantsHTTPS         bool                //   false unless connection URL is https
+	username         string           //   username or ""
+	password         string           //   username or ""
+	consistencyLevel consistencyLevel //   WEAK
+	wantsHTTPS       bool             //   false unless connection URL is https
 
 	// variables below this line need to be initialized in Open()
 
-	timeout            int                //   10
-	hasBeenClosed      bool               //   false
-	ID                 string             //   generated in init()
+	timeout       int    //   10
+	hasBeenClosed bool   //   false
+	ID            string //   generated in init()
 }
 
 /* *****************************************************************
@@ -76,7 +75,7 @@ type Connection struct {
 
 func (conn *Connection) Close() {
 	conn.hasBeenClosed = true
-	trace("%s: %s",conn.ID,"closing connection")
+	trace("%s: %s", conn.ID, "closing connection")
 }
 
 /* *****************************************************************
@@ -86,8 +85,8 @@ func (conn *Connection) Close() {
  * *****************************************************************/
 
 func (conn *Connection) ConsistencyLevel() (string, error) {
-	if ( conn.hasBeenClosed) {
-		return "", errClosed	
+	if conn.hasBeenClosed {
+		return "", errClosed
 	}
 	return consistencyLevelNames[conn.consistencyLevel], nil
 }
@@ -99,16 +98,16 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
  * *****************************************************************/
 
 func (conn *Connection) Leader() (string, error) {
-	if ( conn.hasBeenClosed) {
-		return "", errClosed	
+	if conn.hasBeenClosed {
+		return "", errClosed
 	}
-	trace("%s: Leader(), calling updateClusterInfo()",conn.ID)
+	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
-	if ( err != nil ) {
-		trace("%s: Leader() got error from updateClusterInfo(): %s",conn.ID,err.Error())
+	if err != nil {
+		trace("%s: Leader() got error from updateClusterInfo(): %s", conn.ID, err.Error())
 		return "", err
 	} else {
-		trace("%s: Leader(), updateClusterInfo() OK",conn.ID)
+		trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	}
 	return conn.cluster.leader.String(), nil
 }
@@ -120,23 +119,23 @@ func (conn *Connection) Leader() (string, error) {
  * *****************************************************************/
 
 func (conn *Connection) Peers() ([]string, error) {
-	if ( conn.hasBeenClosed) {
+	if conn.hasBeenClosed {
 		var ans []string
-		return ans, errClosed	
+		return ans, errClosed
 	}
-	plist := make ([]string,0)
+	plist := make([]string, 0)
 
-	trace("%s: Peers(), calling updateClusterInfo()",conn.ID)
+	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
-	if ( err != nil ) {
-		trace("%s: Peers() got error from updateClusterInfo(): %s",conn.ID,err.Error())
+	if err != nil {
+		trace("%s: Peers() got error from updateClusterInfo(): %s", conn.ID, err.Error())
 		return plist, err
 	} else {
-		trace("%s: Peers(), updateClusterInfo() OK",conn.ID)
+		trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
 	}
-	plist = append(plist,conn.cluster.leader.String())
+	plist = append(plist, conn.cluster.leader.String())
 	for _, p := range conn.cluster.otherPeers {
-		plist = append(plist,p.String())
+		plist = append(plist, p.String())
 	}
 	return plist, nil
 }
@@ -148,15 +147,15 @@ func (conn *Connection) Peers() ([]string, error) {
  * *****************************************************************/
 
 func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
-	if ( conn.hasBeenClosed) {
-		return errClosed	
+	if conn.hasBeenClosed {
+		return errClosed
 	}
 	_, ok := consistencyLevels[levelDesired]
-	if ( ok  ) {
+	if ok {
 		conn.consistencyLevel = consistencyLevels[levelDesired]
 		return nil
 	}
-	return errors.New(fmt.Sprintf("unknown consistency level: %s",levelDesired))
+	return errors.New(fmt.Sprintf("unknown consistency level: %s", levelDesired))
 }
 
 /* *****************************************************************
@@ -171,7 +170,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 	be the leader.  The next thing Open() does is updateClusterInfo()
 	so the truth will be revealed soon enough.
 
-	initConnection() does not talk to rqlite.  It only parses the 
+	initConnection() does not talk to rqlite.  It only parses the
 	connection URL and prepares the new connection for work.
 
 	URL format:
@@ -204,21 +203,21 @@ func (conn *Connection) initConnection(url string) error {
 
 	// do some sanity checks.  You know users.
 
-	if ( len(url) < 7 ) {
+	if len(url) < 7 {
 		return errors.New("url specified is impossibly short")
 	}
 
-	if ( strings.HasPrefix(url,"http") == false ) {
+	if strings.HasPrefix(url, "http") == false {
 		return errors.New("url does not start with 'http'")
 	}
 
 	u, err := nurl.Parse(url)
-	if ( err != nil ) {
+	if err != nil {
 		return err
 	}
-	trace("%s: net.url.Parse() OK",conn.ID)
+	trace("%s: net.url.Parse() OK", conn.ID)
 
-	if ( u.Scheme == "https" ) {
+	if u.Scheme == "https" {
 		conn.wantsHTTPS = true
 	}
 
@@ -233,27 +232,27 @@ func (conn *Connection) initConnection(url string) error {
 
 		// not guaranteed, so test if set
 		pass, isset := u.User.Password()
-		if ( isset ) {
+		if isset {
 			conn.password = pass
 		} else {
 			conn.password = ""
 		}
 	}
 
-	if ( u.Host == "" ) {
+	if u.Host == "" {
 		conn.cluster.leader.hostname = "localhost"
 	} else {
 		conn.cluster.leader.hostname = u.Host
 	}
 
-	if ( u.Host == "" ) {
+	if u.Host == "" {
 		conn.cluster.leader.hostname = "localhost"
 		conn.cluster.leader.port = "4001"
 	} else {
 		// SplitHostPort() should only return an error if there is no host port.
 		// I think.
 		h, p, err := net.SplitHostPort(u.Host)
-		if ( err != nil ) {
+		if err != nil {
 			conn.cluster.leader.hostname = u.Host
 		} else {
 			conn.cluster.leader.hostname = h
@@ -263,41 +262,39 @@ func (conn *Connection) initConnection(url string) error {
 
 	/*
 
-	at the moment, the only allowed query is "level=" with 
-	the desired consistency level
+		at the moment, the only allowed query is "level=" with
+		the desired consistency level
 
 	*/
 
 	// default
 	conn.consistencyLevel = cl_WEAK
 
-	if ( u.RawQuery != "" ) {
-		if ( u.RawQuery == "level=weak") {
+	if u.RawQuery != "" {
+		if u.RawQuery == "level=weak" {
 			// that's ok but nothing to do
-		} else if ( u.RawQuery == "level=strong" ) {
+		} else if u.RawQuery == "level=strong" {
 			conn.consistencyLevel = cl_STRONG
-		} else if ( u.RawQuery == "level=none" ) { // the fools!
+		} else if u.RawQuery == "level=none" { // the fools!
 			conn.consistencyLevel = cl_NONE
 		} else {
 			return errors.New("don't know what to do with this query: " + u.RawQuery)
 		}
 	}
 
-	trace("%s: parseDefaultPeer() is done:",conn.ID)
-	if ( conn.wantsHTTPS == true ) {
-		trace("%s:    %s -> %s",conn.ID,"wants https?","yes")
+	trace("%s: parseDefaultPeer() is done:", conn.ID)
+	if conn.wantsHTTPS == true {
+		trace("%s:    %s -> %s", conn.ID, "wants https?", "yes")
 	} else {
-		trace("%s:    %s -> %s",conn.ID,"wants https?","no")
+		trace("%s:    %s -> %s", conn.ID, "wants https?", "no")
 	}
-	trace("%s:    %s -> %s",conn.ID,"username",conn.username)
-	trace("%s:    %s -> %s",conn.ID,"password",conn.password)
-	trace("%s:    %s -> %s",conn.ID,"hostname",conn.cluster.leader.hostname)
-	trace("%s:    %s -> %s",conn.ID,"port",conn.cluster.leader.port)
-	trace("%s:    %s -> %s",conn.ID,"consistencyLevel",consistencyLevelNames[conn.consistencyLevel])
+	trace("%s:    %s -> %s", conn.ID, "username", conn.username)
+	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
+	trace("%s:    %s -> %s", conn.ID, "hostname", conn.cluster.leader.hostname)
+	trace("%s:    %s -> %s", conn.ID, "port", conn.cluster.leader.port)
+	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
 
 	conn.cluster.conn = conn
 
 	return nil
 }
-
-
