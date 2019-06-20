@@ -8,7 +8,7 @@ import "os"
 
 func testUrl() string {
 	url := os.Getenv("GORQLITE_TEST_URL")
-	if ( url == "" ) {
+	if url == "" {
 		url = "http://"
 	}
 	return url
@@ -16,10 +16,8 @@ func testUrl() string {
 
 func testTableName() string {
 	tableName := os.Getenv("GORQLITE_TEST_TABLE")
-	if ( tableName == "" ) {
+	if tableName == "" {
 		tableName = "gorqlite_test"
 	}
 	return tableName
 }
-
-

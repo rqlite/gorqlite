@@ -10,11 +10,11 @@
 
 	Learn more about rqlite at: https://github.com/rqlite/rqlite
 
- */
+*/
 package gorqlite
 
 /*
-	this file contains package-level stuff: 
+	this file contains package-level stuff:
 		consts
 		init()
 		Open, TraceOn(), TraceOff()
@@ -33,16 +33,19 @@ import "strings"
  * *****************************************************************/
 
 type consistencyLevel int
+
 const (
 	cl_NONE consistencyLevel = iota
 	cl_WEAK
 	cl_STRONG
 )
+
 // used in several places, actually
 var consistencyLevelNames map[consistencyLevel]string
 var consistencyLevels map[string]consistencyLevel
 
 type apiOperation int
+
 const (
 	api_QUERY apiOperation = iota
 	api_STATUS
@@ -56,7 +59,7 @@ const (
  * *****************************************************************/
 
 func init() {
-  traceOut = ioutil.Discard
+	traceOut = ioutil.Discard
 
 	consistencyLevelNames = make(map[consistencyLevel]string)
 	consistencyLevelNames[cl_NONE] = "none"
@@ -69,7 +72,6 @@ func init() {
 	consistencyLevels["strong"] = cl_STRONG
 
 }
-
 
 /* *****************************************************************
 Open() creates and returns a "connection" to rqlite.
@@ -99,7 +101,7 @@ func Open(connURL string) (Connection, error) {
 		return conn, err
 	}
 	conn.ID = fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-	trace("%s: Open() called for url: %s",conn.ID,connURL)
+	trace("%s: Open() called for url: %s", conn.ID, connURL)
 
 	// set defaults
 	conn.timeout = 10
@@ -107,7 +109,7 @@ func Open(connURL string) (Connection, error) {
 
 	// parse the URL given
 	err = conn.initConnection(connURL)
-	if ( err != nil ) {
+	if err != nil {
 		return conn, err
 	}
 
@@ -124,7 +126,7 @@ func Open(connURL string) (Connection, error) {
 
 	func: trace()
 
-	adds a message to the trace output	
+	adds a message to the trace output
 
 	not a public function.  we (inside) can add - outside they can
 	only see.
@@ -132,7 +134,7 @@ func Open(connURL string) (Connection, error) {
 	Call trace as:     Sprintf pattern , args...
 
 	This is done so that the more expensive Sprintf() stuff is
-	done only if truly needed.  When tracing is off, calls to 
+	done only if truly needed.  When tracing is off, calls to
 	trace() just hit a bool check and return.  If tracing is on,
 	then the Sprintfing is done at a leisurely pace because, well,
 	we're tracing.
@@ -146,7 +148,7 @@ func Open(connURL string) (Connection, error) {
 
 func trace(pattern string, args ...interface{}) {
 	// don't do the probably expensive Sprintf() if not needed
-	if ( wantsTrace == false ) {
+	if wantsTrace == false {
 		return
 	}
 
@@ -156,8 +158,8 @@ func trace(pattern string, args ...interface{}) {
 
 	// make sure there is one and only one newline
 	nlPattern := strings.TrimSpace(pattern) + "\n"
-	msg := fmt.Sprintf(nlPattern,args...)
-	traceOut.Write( []byte( msg ) )
+	msg := fmt.Sprintf(nlPattern, args...)
+	traceOut.Write([]byte(msg))
 }
 
 /*
