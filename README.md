@@ -30,7 +30,7 @@ gorqlite should be considered alpha until more testers share their experiences. 
 `go get github.com/raindog308/gorqlite`
 
 ## Examples
-```
+```go
 // these URLs are just generic database URLs, not rqlite API URLs,
 // so you don't need to worry about the various rqlite paths ("/db/query"), etc.
 // just supply the base url and not "db" or anything after it.
