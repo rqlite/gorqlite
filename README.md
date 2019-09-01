@@ -1,6 +1,6 @@
 # gorqlite - a golang client for rqlite
 
-gorqlite is a golang client for rqlite that provides easy-to-use abstrations for working with the rqlite API.
+gorqlite is a golang client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
 
 It is not a database/sql driver (read below for why this is impossible) but instead provides similar semantics, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
@@ -12,10 +12,10 @@ gorqlite should be considered alpha until more testers share their experiences. 
 
 ## Features
 
-* Abstracts the rqlite http API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an interator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}.
+* Abstracts the rqlite http API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an iterator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}.
 * Timings and other metadata (e.g., num rows affected, last insert ID, etc.) is conveniently available and parsed into appropriate types.
 * A connection abstraction allows gorqlite to discover and remember the rqlite leader.  gorqlite will automatically try other peers if the leader is lost, enabling fault-tolerant API operations.
-* Timeout can be set on a per-Connection basis to accomodate those with far-flung empires.
+* Timeout can be set on a per-Connection basis to accommodate those with far-flung empires.
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
 * Only a single node needs to be specified in the connection.  gorqlite will talk to it and figure out the rest of the cluster from its redirects and status API.
 * Support for several rqlite-specific operations:
@@ -63,7 +63,7 @@ conn.SetTimeout(10)
 
 // simulate database/sql Prepare()
 statements := make ([]string,0)
-pattern := "INSERT INTO secret_agents(id, hero_name, abbrev) VALES (%d, '%s', '%3s')"
+pattern := "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (%d, '%s', '%3s')"
 statements = append(statements,fmt.Sprintf(pattern,125718,"Speed Gibson","Speed"))
 statements = append(statements,fmt.Sprintf(pattern,209166,"Clint Barlow","Clint"))
 statements = append(statements,fmt.Sprintf(pattern,44107,"Barney Dunlap","Barney"))
@@ -122,7 +122,7 @@ for n, p := range peers {
 }
 
 // turn on debug tracing to the io.Writer of your choice.
-// gorqlite will verbosely write bery granular debug information.
+// gorqlite will verbosely write very granular debug information.
 // this is similar to perl's DBI->Trace() facility.
 // note that this is done at the package level, not the connection
 // level, so you can debug Open() etc. if need be.
@@ -140,7 +140,7 @@ gorqlite.TraceOff()
 
 If you use access control, any user connecting will need the "status" permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the master is lost.
 
-rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be suboptimal.
+rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be sub-optimal.
 
 ## TODO
 
@@ -154,9 +154,9 @@ Several features may be added in the future:
 
 - perhaps deleting a node (the remove API)
 
-- since connections are just config info, it should be possible to clone them, which woud save startup time for new connections.  This needs to be threadsafe, though, since a connection at any time could be updating its cluster info, etc.
+- since connections are just config info, it should be possible to clone them, which would save startup time for new connections.  This needs to be thread-safe, though, since a connection at any time could be updating its cluster info, etc.
 
-- gorqlite always talks to the master (unless it's searching for a master).  In theory, you talk to a non-master in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the defaut URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
+- gorqlite always talks to the master (unless it's searching for a master).  In theory, you talk to a non-master in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the default URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
 
 ## Why not a database/sql driver?
 
@@ -178,7 +178,7 @@ The chief reasons a proper database/sql driver is not possible are:
 
 In `database/sql`, `Open()` doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
 
-Unlike `database/sql` connections, a gorqlite connection is not threadsafe.  
+Unlike `database/sql` connections, a gorqlite connection is not thread-safe.  
 
 `Close()` will set a flag so if you try to use the connection afterwards, it will fail.  But otherwise, you can merrily let your connections be garbage-collected with no harm, because they're just configuration tracking bundles and everything to the rqlite cluster is stateless.  Indeed, the true reason that `Close()` exists is the author's feeling that if you open something, you should be able to close it.  So why not `GetConnection()` then instead of `Open()`?  Or `GetClusterConfigurationTrackingObject()`?  I don't know.  Fork me.
 
