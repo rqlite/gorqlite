@@ -7,7 +7,7 @@ import "os"
 func TestInitCluster(t *testing.T) {
 
 	TraceOn(os.Stderr)
-	t.Logf("trying Open")
+	t.Logf("trying Open: %s\n", testUrl())
 	conn, err := Open(testUrl())
 	if err != nil {
 		t.Logf("--> FAILED")

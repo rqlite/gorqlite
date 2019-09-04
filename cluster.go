@@ -23,9 +23,6 @@ import "errors"
 import "fmt"
 import "strings"
 
-//import "os"
-//import "reflect"
-
 /* *****************************************************************
 
 	type: peer
@@ -177,33 +174,30 @@ func (conn *Connection) updateClusterInfo() error {
 		return err
 	}
 	sMap := sections["store"].(map[string]interface{})
-	leaderMap := sMap["leader"].(map[string]interface{})
-	leaderRaftAddr := leaderMap["addr"].(string)
-	leaderRaftID := leaderMap["node_id"].(string)
+	leaderMap, ok := sMap["leader"].(map[string]interface{})
+	var leaderRaftAddr string
+	if ok {
+		leaderRaftAddr = leaderMap["addr"].(string)
+	} else {
+		leaderRaftAddr = sMap["leader"].(string)
+	}
 	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
 
 	// leader in this case is the RAFT address
 	// we want the HTTP address, so we'll use this as
 	// a key as we sift through APIPeers
 
-	apiPeers := sMap["metadata"].(map[string]interface{})
+	apiPeers := sMap["meta"].(map[string]interface{})
 
-	for raftAddr, apiAddrMap := range apiPeers {
-		httpAddr := apiAddrMap.(map[string]interface{})["api_addr"].(string)
-		trace("%s: examining httpAddr %s", conn.ID, httpAddr)
-
-		/* httpAddr are usually hostname:port */
-		var p peer
-		parts := strings.Split(httpAddr, ":")
-		p.hostname = parts[0]
-		p.port = parts[1]
-
-		// so is this the leader?
-		if leaderRaftID == raftAddr {
-			trace("%s: found leader at %s", conn.ID, httpAddr)
-			rc.leader = p
-		} else {
-			rc.otherPeers = append(rc.otherPeers, p)
+loop:
+	for _, apiAddrMap := range apiPeers {
+		if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
+			peerHttp, ok := _httpAddr[leaderRaftAddr]
+			if ok {
+				parts := strings.Split(peerHttp.(string), ":")
+				rc.leader = peer{parts[0], parts[1]}
+				break loop
+			}
 		}
 	}
 

@@ -62,7 +62,7 @@ PeerLoop:
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
 			continue PeerLoop
 		}
-		trace("%s: http.NewRequest() OK")
+		trace("%s: http.NewRequest() OK", conn.ID)
 		req.Header.Set("Content-Type", "application/json")
 		client := &http.Client{}
 		client.Timeout = time.Duration(conn.timeout) * time.Second
@@ -73,14 +73,14 @@ PeerLoop:
 			continue PeerLoop
 		}
 		defer response.Body.Close()
-		trace("%s: client.Do() OK")
+		trace("%s: client.Do() OK", conn.ID)
 		responseBody, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
 			continue PeerLoop
 		}
-		trace("%s: ioutil.ReadAll() OK")
+		trace("%s: ioutil.ReadAll() OK", conn.ID)
 		if response.Status != "200 OK" {
 			trace("%s: got code %s", conn.ID, response.Status)
 			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s", url, response.Status))
