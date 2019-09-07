@@ -3,6 +3,7 @@ package gorqlite
 import "errors"
 import "fmt"
 import "encoding/json"
+import "time"
 
 /* *****************************************************************
 
@@ -115,7 +116,9 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		results = append(results, errResult)
 		return results, errClosed
 	}
-	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
+	for i, stmt := range sqlStatements {
+		trace("%s: Query (%d/%d): %s", conn.ID, i, len(sqlStatements), stmt)
+	}
 
 	// if we get an error POSTing, that's a showstopper
 	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements)
@@ -267,7 +270,16 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for i := 0; i < len(qr.columns); i++ {
-		ans[qr.columns[i]] = thisRowValues[i]
+		switch qr.types[i] {
+		case "date", "datetime":
+			t, err := toTime(thisRowValues[i])
+			if err != nil {
+				return ans, err
+			}
+			ans[qr.columns[i]] = t
+		default:
+			ans[qr.columns[i]] = thisRowValues[i]
+		}
 	}
 
 	return ans, nil
@@ -327,6 +339,23 @@ func (qr *QueryResult) RowNumber() int64 {
 	return qr.rowNumber
 }
 
+func toTime(src interface{}) (time.Time, error) {
+	switch src := src.(type) {
+	case nil:
+	case string:
+		if len(src) == 19 {
+			const layout = "2006-01-02 15:04:05"
+			return time.Parse(layout, src)
+		}
+		return time.Parse(time.RFC3339, src)
+	case float64:
+		return time.Unix(int64(src), 0), nil
+	case int64:
+		return time.Unix(src, 0), nil
+	}
+	return time.Time{}, fmt.Errorf("invalid time type:%T val:%v", src, src)
+}
+
 /* *****************************************************************
 
    method: QueryResult.Scan()
@@ -359,16 +388,36 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for n, d := range dest {
+		src := thisRowValues[n]
 		switch d.(type) {
+		case *time.Time:
+			t, err := toTime(src)
+			if err != nil {
+				return fmt.Errorf("%w: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
+			}
+			*d.(*time.Time) = t
+		case *int:
+			switch src := src.(type) {
+			case float64:
+				*d.(*int64) = int64(src)
+			case int64:
+				*d.(*int64) = src
+			default:
+				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+			}
 		case *int64:
-			f := int64(thisRowValues[n].(float64))
-			*d.(*int64) = f
+			switch src := src.(type) {
+			case float64:
+				*d.(*int64) = int64(src)
+			case int64:
+				*d.(*int64) = src
+			default:
+				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+			}
 		case *float64:
-			f := float64(thisRowValues[n].(float64))
-			*d.(*float64) = f
+			*d.(*float64) = float64(src.(float64))
 		case *string:
-			s := string(thisRowValues[n].(string))
-			*d.(*string) = s
+			*d.(*string) = string(src.(string))
 		default:
 			return errors.New(fmt.Sprintf("unknown destination type to scan into in variable #%d", n))
 		}
