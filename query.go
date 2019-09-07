@@ -1,9 +1,12 @@
 package gorqlite
 
-import "errors"
-import "fmt"
-import "encoding/json"
-import "time"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"time"
+)
 
 /* *****************************************************************
 
@@ -399,9 +402,15 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 		case *int:
 			switch src := src.(type) {
 			case float64:
-				*d.(*int64) = int64(src)
+				*d.(*int) = int(src)
 			case int64:
-				*d.(*int64) = src
+				*d.(*int) = int(src)
+			case string:
+				i, err := strconv.Atoi(src)
+				if err != nil {
+					return err
+				}
+				*d.(*int) = i
 			default:
 				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
 			}
@@ -411,6 +420,12 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				*d.(*int64) = int64(src)
 			case int64:
 				*d.(*int64) = src
+			case string:
+				i, err := strconv.ParseInt(src, 10, 64)
+				if err != nil {
+					return err
+				}
+				*d.(*int64) = i
 			default:
 				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
 			}
