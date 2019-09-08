@@ -119,9 +119,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		results = append(results, errResult)
 		return results, errClosed
 	}
-	for i, stmt := range sqlStatements {
-		trace("%s: Query (%d/%d): %s", conn.ID, i+1, len(sqlStatements), stmt)
-	}
+	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
 	// if we get an error POSTing, that's a showstopper
 	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements)
@@ -152,9 +150,6 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 
 	resultsArray := sections["results"].([]interface{})
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
-	for i, result := range results {
-		trace("%s: result (%d/%d): %s\n", conn.ID, i+1, len(results), result)
-	}
 
 	numStatementErrors := 0
 	for n, r := range resultsArray {
