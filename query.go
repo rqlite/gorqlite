@@ -395,6 +395,10 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for n, d := range dest {
 		src := thisRowValues[n]
+		if src == nil {
+			trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+			continue
+		}
 		switch d.(type) {
 		case *time.Time:
 			if src == nil {
@@ -418,7 +422,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				}
 				*d.(*int) = i
 			default:
-				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+				return fmt.Errorf("invalid int col:%d type:%T val:%v", n, src, src)
 			}
 		case *int64:
 			switch src := src.(type) {
@@ -438,7 +442,12 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 		case *float64:
 			*d.(*float64) = float64(src.(float64))
 		case *string:
-			*d.(*string) = string(src.(string))
+			switch src := src.(type) {
+			case string:
+				*d.(*string) = src
+			default:
+				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
+			}
 		default:
 			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
 		}
