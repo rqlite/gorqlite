@@ -120,7 +120,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		return results, errClosed
 	}
 	for i, stmt := range sqlStatements {
-		trace("%s: Query (%d/%d): %s", conn.ID, i, len(sqlStatements), stmt)
+		trace("%s: Query (%d/%d): %s", conn.ID, i+1, len(sqlStatements), stmt)
 	}
 
 	// if we get an error POSTing, that's a showstopper
@@ -153,7 +153,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 	resultsArray := sections["results"].([]interface{})
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
 	for i, result := range results {
-		trace("%s: result (%d/%d): %s\n", conn.ID, i, len(results), result)
+		trace("%s: result (%d/%d): %s\n", conn.ID, i+1, len(results), result)
 	}
 
 	numStatementErrors := 0
