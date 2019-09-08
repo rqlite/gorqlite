@@ -152,6 +152,9 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 
 	resultsArray := sections["results"].([]interface{})
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
+	for i, result := range results {
+		trace("%s: result (%d/%d): %s\n", conn.ID, i, len(results), result)
+	}
 
 	numStatementErrors := 0
 	for n, r := range resultsArray {
@@ -394,6 +397,9 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 		src := thisRowValues[n]
 		switch d.(type) {
 		case *time.Time:
+			if src == nil {
+				continue
+			}
 			t, err := toTime(src)
 			if err != nil {
 				return fmt.Errorf("%w: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
@@ -434,7 +440,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 		case *string:
 			*d.(*string) = string(src.(string))
 		default:
-			return errors.New(fmt.Sprintf("unknown destination type to scan into in variable #%d", n))
+			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
 		}
 	}
 
