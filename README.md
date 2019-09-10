@@ -27,7 +27,7 @@ gorqlite should be considered alpha until more testers share their experiences. 
 
 ## Install
 
-`go get github.com/raindog308/gorqlite`
+`go get github.com/rqlite/gorqlite`
 
 ## Examples
 ```go
