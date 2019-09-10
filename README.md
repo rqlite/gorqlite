@@ -1,5 +1,4 @@
 # gorqlite - a golang client for rqlite
-[![Circle CI](https://circleci.com/gh/rqlite/gorqlite/tree/master.svg?style=svg)](https://circleci.com/gh/rqlite/gorqlite/tree/master)
 
 gorqlite is a golang client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
 
