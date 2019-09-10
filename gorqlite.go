@@ -9,7 +9,6 @@
 	Project home page: https://github.com/raindo308/gorqlite
 
 	Learn more about rqlite at: https://github.com/rqlite/rqlite
-
 */
 package gorqlite
 
