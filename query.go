@@ -342,11 +342,10 @@ func (qr *QueryResult) RowNumber() int64 {
 
 func toTime(src interface{}) (time.Time, error) {
 	switch src := src.(type) {
-	case nil:
 	case string:
-		if len(src) == 19 {
-			const layout = "2006-01-02 15:04:05"
-			return time.Parse(layout, src)
+		const layout = "2006-01-02 15:04:05"
+		if t, err := time.Parse(layout, src); err == nil {
+			return t, nil
 		}
 		return time.Parse(time.RFC3339, src)
 	case float64:
