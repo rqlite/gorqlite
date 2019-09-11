@@ -401,7 +401,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			}
 			t, err := toTime(src)
 			if err != nil {
-				return fmt.Errorf("%w: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
+				return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
 			}
 			*d.(*time.Time) = t
 		case *int:
