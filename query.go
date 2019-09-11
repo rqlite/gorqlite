@@ -1,8 +1,12 @@
 package gorqlite
 
-import "errors"
-import "fmt"
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strconv"
+	"time"
+)
 
 /* *****************************************************************
 
@@ -267,7 +271,16 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for i := 0; i < len(qr.columns); i++ {
-		ans[qr.columns[i]] = thisRowValues[i]
+		switch qr.types[i] {
+		case "date", "datetime":
+			t, err := toTime(thisRowValues[i])
+			if err != nil {
+				return ans, err
+			}
+			ans[qr.columns[i]] = t
+		default:
+			ans[qr.columns[i]] = thisRowValues[i]
+		}
 	}
 
 	return ans, nil
@@ -327,6 +340,22 @@ func (qr *QueryResult) RowNumber() int64 {
 	return qr.rowNumber
 }
 
+func toTime(src interface{}) (time.Time, error) {
+	switch src := src.(type) {
+	case string:
+		const layout = "2006-01-02 15:04:05"
+		if t, err := time.Parse(layout, src); err == nil {
+			return t, nil
+		}
+		return time.Parse(time.RFC3339, src)
+	case float64:
+		return time.Unix(int64(src), 0), nil
+	case int64:
+		return time.Unix(src, 0), nil
+	}
+	return time.Time{}, fmt.Errorf("invalid time type:%T val:%v", src, src)
+}
+
 /* *****************************************************************
 
    method: QueryResult.Scan()
@@ -359,18 +388,62 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for n, d := range dest {
+		src := thisRowValues[n]
+		if src == nil {
+			trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+			continue
+		}
 		switch d.(type) {
+		case *time.Time:
+			if src == nil {
+				continue
+			}
+			t, err := toTime(src)
+			if err != nil {
+				return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
+			}
+			*d.(*time.Time) = t
+		case *int:
+			switch src := src.(type) {
+			case float64:
+				*d.(*int) = int(src)
+			case int64:
+				*d.(*int) = int(src)
+			case string:
+				i, err := strconv.Atoi(src)
+				if err != nil {
+					return err
+				}
+				*d.(*int) = i
+			default:
+				return fmt.Errorf("invalid int col:%d type:%T val:%v", n, src, src)
+			}
 		case *int64:
-			f := int64(thisRowValues[n].(float64))
-			*d.(*int64) = f
+			switch src := src.(type) {
+			case float64:
+				*d.(*int64) = int64(src)
+			case int64:
+				*d.(*int64) = src
+			case string:
+				i, err := strconv.ParseInt(src, 10, 64)
+				if err != nil {
+					return err
+				}
+				*d.(*int64) = i
+			default:
+				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+			}
 		case *float64:
-			f := float64(thisRowValues[n].(float64))
-			*d.(*float64) = f
+			*d.(*float64) = float64(src.(float64))
 		case *string:
-			s := string(thisRowValues[n].(string))
-			*d.(*string) = s
+			switch src := src.(type) {
+			case string:
+				*d.(*string) = src
+			default:
+				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
+			}
 		default:
-			return errors.New(fmt.Sprintf("unknown destination type to scan into in variable #%d", n))
+			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
 		}
 	}
 
