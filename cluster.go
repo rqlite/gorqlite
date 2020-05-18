@@ -17,11 +17,13 @@ package gorqlite
 
  * *****************************************************************/
 
-import "bytes"
-import "encoding/json"
-import "errors"
-import "fmt"
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+)
 
 /* *****************************************************************
 
@@ -177,7 +179,7 @@ func (conn *Connection) updateClusterInfo() error {
 	leaderMap, ok := sMap["leader"].(map[string]interface{})
 	var leaderRaftAddr string
 	if ok {
-		leaderRaftAddr = leaderMap["addr"].(string)
+		leaderRaftAddr = leaderMap["node_id"].(string)
 	} else {
 		leaderRaftAddr = sMap["leader"].(string)
 	}
@@ -187,16 +189,16 @@ func (conn *Connection) updateClusterInfo() error {
 	// we want the HTTP address, so we'll use this as
 	// a key as we sift through APIPeers
 
-	apiPeers := sMap["meta"].(map[string]interface{})
+	apiPeers, ok := sMap["metadata"].(map[string]interface{})
+	if !ok {
+		apiPeers = map[string]interface{}{}
+	}
 
-loop:
-	for _, apiAddrMap := range apiPeers {
+	if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
 		if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
-			peerHttp, ok := _httpAddr[leaderRaftAddr]
-			if ok {
+			if peerHttp, ok := _httpAddr["api_addr"]; ok {
 				parts := strings.Split(peerHttp.(string), ":")
 				rc.leader = peer{parts[0], parts[1]}
-				break loop
 			}
 		}
 	}
