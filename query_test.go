@@ -31,7 +31,7 @@ func TestQueryOne(t *testing.T) {
 	started := time.Now().Add(-time.Second)
 
 	t.Logf("trying WriteOne CREATE")
-	wr, err = conn.WriteOne("CREATE TABLE " + testTableName() + " (id integer, name text, ts DATETIME DEFAULT (datetime('now','utc')))")
+	wr, err = conn.WriteOne("CREATE TABLE " + testTableName() + " (id integer, name text, ts DATETIME DEFAULT CURRENT_TIMESTAMP)")
 	if err != nil {
 		t.Logf("--> FATAL")
 		t.Fatal()
