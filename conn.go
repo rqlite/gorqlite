@@ -10,12 +10,15 @@ package gorqlite
 
  * *****************************************************************/
 
-import "errors"
-import "fmt"
-import "io"
-import "net"
-import nurl "net/url"
-import "strings"
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net"
+
+	nurl "net/url"
+	"strings"
+)
 
 var errClosed = errors.New("gorqlite: connection is closed")
 var traceOut io.Writer
@@ -55,10 +58,11 @@ type Connection struct {
 	  name               type                default
 	*/
 
-	username         string           //   username or ""
-	password         string           //   username or ""
-	consistencyLevel consistencyLevel //   WEAK
-	wantsHTTPS       bool             //   false unless connection URL is https
+	username          string           //   username or ""
+	password          string           //   username or ""
+	consistencyLevel  consistencyLevel //   WEAK
+	wantsHTTPS        bool             //   false unless connection URL is https
+	wantsTransactions bool             //   true unless user states otherwise
 
 	// variables below this line need to be initialized in Open()
 
@@ -156,6 +160,14 @@ func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 		return nil
 	}
 	return errors.New(fmt.Sprintf("unknown consistency level: %s", levelDesired))
+}
+
+func (conn *Connection) SetExecutionWithTansaction(state bool) error {
+	if conn.hasBeenClosed {
+		return errClosed
+	}
+	conn.wantsTransactions = state
+	return nil
 }
 
 /* *****************************************************************
@@ -282,6 +294,9 @@ func (conn *Connection) initConnection(url string) error {
 		}
 	}
 
+	//deafult transaction state
+	conn.wantsTransactions = true
+
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
 	if conn.wantsHTTPS == true {
 		trace("%s:    %s -> %s", conn.ID, "wants https?", "yes")
@@ -293,6 +308,7 @@ func (conn *Connection) initConnection(url string) error {
 	trace("%s:    %s -> %s", conn.ID, "hostname", conn.cluster.leader.hostname)
 	trace("%s:    %s -> %s", conn.ID, "port", conn.cluster.leader.port)
 	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
+	trace("%s:    %s -> %s", conn.ID, "wantTransaction", conn.wantsTransactions)
 
 	conn.cluster.conn = conn
 
