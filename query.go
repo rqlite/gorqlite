@@ -145,7 +145,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 
 	/*
 		at this point, we have a "results" section and
-		a "time" section.  we can igore the latter.
+		a "time" section.  we can ignore the latter.
 	*/
 
 	resultsArray := sections["results"].([]interface{})
