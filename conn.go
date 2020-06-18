@@ -162,7 +162,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 	return errors.New(fmt.Sprintf("unknown consistency level: %s", levelDesired))
 }
 
-func (conn *Connection) SetExecutionWithTansaction(state bool) error {
+func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 	if conn.hasBeenClosed {
 		return errClosed
 	}
@@ -294,7 +294,7 @@ func (conn *Connection) initConnection(url string) error {
 		}
 	}
 
-	//deafult transaction state
+	//Deafult transaction state
 	conn.wantsTransactions = true
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
