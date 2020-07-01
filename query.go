@@ -273,9 +273,13 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 	for i := 0; i < len(qr.columns); i++ {
 		switch qr.types[i] {
 		case "date", "datetime":
-			t, err := toTime(thisRowValues[i])
-			if err != nil {
-				return ans, err
+			if thisRowValues[i] != nil {
+				t, err := toTime(thisRowValues[i])
+				if err != nil {
+					return ans, err
+				}
+			} else {
+				t := nil
 			}
 			ans[qr.columns[i]] = t
 		default:
@@ -350,6 +354,8 @@ func toTime(src interface{}) (time.Time, error) {
 		return time.Parse(time.RFC3339, src)
 	case float64:
 		return time.Unix(int64(src), 0), nil
+	case int64:
+		return time.Unix(src, 0), nil
 	case int64:
 		return time.Unix(src, 0), nil
 	}
