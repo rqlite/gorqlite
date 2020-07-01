@@ -356,8 +356,6 @@ func toTime(src interface{}) (time.Time, error) {
 		return time.Unix(int64(src), 0), nil
 	case int64:
 		return time.Unix(src, 0), nil
-	case int64:
-		return time.Unix(src, 0), nil
 	}
 	return time.Time{}, fmt.Errorf("invalid time type:%T val:%v", src, src)
 }
