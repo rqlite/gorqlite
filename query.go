@@ -278,10 +278,10 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 				if err != nil {
 					return ans, err
 				}
+				ans[qr.columns[i]] = t
 			} else {
-				t := nil
+				ans[qr.columns[i]] = nil
 			}
-			ans[qr.columns[i]] = t
 		default:
 			ans[qr.columns[i]] = thisRowValues[i]
 		}
