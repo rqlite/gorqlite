@@ -273,9 +273,13 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 	for i := 0; i < len(qr.columns); i++ {
 		switch qr.types[i] {
 		case "date", "datetime":
-			t, err := toTime(thisRowValues[i])
-			if err != nil {
-				return ans, err
+			if thisRowValues[i] != nil {
+				t, err := toTime(thisRowValues[i])
+				if err != nil {
+					return ans, err
+				}
+			} else {
+				t := nil
 			}
 			ans[qr.columns[i]] = t
 		default:
