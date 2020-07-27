@@ -170,8 +170,11 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 			continue
 		}
 
-		// time is a float64
-		thisQR.Timing = thisResult["time"].(float64)
+		_, ok = thisResult["time"]
+		if ok {
+			// time is a float64
+			thisQR.Timing = thisResult["time"].(float64)
+		}
 
 		// column & type are an array of strings
 		c := thisResult["columns"].([]interface{})

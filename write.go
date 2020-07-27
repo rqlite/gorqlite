@@ -6,9 +6,11 @@ package gorqlite
 		WriteResult and its methods
 */
 
-import "errors"
-import "encoding/json"
-import "fmt"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
 /* *****************************************************************
 
@@ -143,7 +145,11 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 		if ok {
 			thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
 		}
-		thisWR.Timing = thisResult["time"].(float64)
+
+		_, ok = thisResult["time"]
+		if ok {
+			thisWR.Timing = thisResult["time"].(float64)
+		}
 
 		trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
 		results = append(results, thisWR)
