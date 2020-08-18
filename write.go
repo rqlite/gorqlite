@@ -114,7 +114,14 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 		a "time" section.  we can igore the latter.
 	*/
 
-	resultsArray := sections["results"].([]interface{})
+	resultsArray, ok := sections["results"].([]interface{})
+	if !ok {
+		trace("%s: sections[\"results\"] ERROR: interface conversion: interface {} is nil, not []interface {}", conn.ID)
+		var errResult WriteResult
+		errResult.Err = errors.New("interface conversion: interface {} is nil, not []interface {}")
+		results = append(results, errResult)
+		return results, errors.New("interface conversion: interface {} is nil, not []interface {}")
+	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
 	numStatementErrors := 0
 	for n, k := range resultsArray {
