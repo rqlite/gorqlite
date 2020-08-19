@@ -6,9 +6,11 @@ package gorqlite
 		WriteResult and its methods
 */
 
-import "errors"
-import "encoding/json"
-import "fmt"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
 /* *****************************************************************
 
@@ -116,11 +118,12 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 
 	resultsArray, ok := sections["results"].([]interface{})
 	if !ok {
-		trace("%s: sections[\"results\"] ERROR: interface conversion: interface {} is nil, not []interface {}", conn.ID)
+		err = errors.New("Result key is missing from response")
+		trace("%s: sections[\"results\"] ERROR: %s", conn.ID, err)
 		var errResult WriteResult
-		errResult.Err = errors.New("interface conversion: interface {} is nil, not []interface {}")
+		errResult.Err = err
 		results = append(results, errResult)
-		return results, errors.New("interface conversion: interface {} is nil, not []interface {}")
+		return results, err
 	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
 	numStatementErrors := 0
@@ -150,7 +153,10 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 		if ok {
 			thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
 		}
-		thisWR.Timing = thisResult["time"].(float64)
+		_, ok = thisResult["time"] // could be nil
+		if ok {
+			thisWR.Timing = thisResult["time"].(float64)
+		}
 
 		trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
 		results = append(results, thisWR)
