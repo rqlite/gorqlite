@@ -13,13 +13,21 @@ package gorqlite
 
 */
 
-import "bytes"
-import "encoding/json"
-import "errors"
-import "fmt"
-import "io/ioutil"
-import "net/http"
-import "time"
+import (
+	"bytes"
+	"crypto/tls"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"time"
+)
+
+func init() {
+	// allow using self signed certificates
+	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+}
 
 /* *****************************************************************
 
