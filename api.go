@@ -15,7 +15,6 @@ package gorqlite
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,11 +22,6 @@ import (
 	"net/http"
 	"time"
 )
-
-func init() {
-	// allow using self signed certificates
-	http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-}
 
 /* *****************************************************************
 
