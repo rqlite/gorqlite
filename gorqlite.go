@@ -49,6 +49,7 @@ const (
 	api_QUERY apiOperation = iota
 	api_STATUS
 	api_WRITE
+	api_NODES
 )
 
 /* *****************************************************************

@@ -36,7 +36,7 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 	trace("%s: rqliteApiGet() called", conn.ID)
 
 	// only api_STATUS now - maybe someday BACKUP
-	if apiOp != api_STATUS {
+	if apiOp != api_STATUS && apiOp != api_NODES {
 		return responseBody, errors.New("rqliteApiGet() called for invalid api operation")
 	}
 
@@ -55,7 +55,7 @@ PeerLoop:
 	for peerNum, peerToTry := range peersToTry {
 		trace("%s: attemping to contact peer %d", conn.ID, peerNum)
 		// docs say default GET policy is up to 10 follows automatically
-		url := conn.assembleURL(api_STATUS, peerToTry)
+		url := conn.assembleURL(apiOp, peerToTry)
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())

@@ -294,7 +294,7 @@ func (conn *Connection) initConnection(url string) error {
 		}
 	}
 
-	//Deafult transaction state
+	// Default transaction state
 	conn.wantsTransactions = true
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
