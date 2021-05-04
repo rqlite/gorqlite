@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -122,6 +123,8 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	switch apiOp {
 	case api_STATUS:
 		stringBuffer.WriteString("/status")
+	case api_NODES:
+		stringBuffer.WriteString("/nodes")
 	case api_QUERY:
 		stringBuffer.WriteString("/db/query")
 	case api_WRITE:
@@ -141,6 +144,8 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		trace("%s: assembled URL for an api_QUERY: %s", conn.ID, stringBuffer.String())
 	case api_STATUS:
 		trace("%s: assembled URL for an api_STATUS: %s", conn.ID, stringBuffer.String())
+	case api_NODES:
+		trace("%s: assembled URL for an api_NODES: %s", conn.ID, stringBuffer.String())
 	case api_WRITE:
 		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, stringBuffer.String())
 	}
@@ -188,10 +193,10 @@ func (conn *Connection) updateClusterInfo() error {
 	}
 	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
 
+	// In 5.x and earlier, "metadata" is available
 	// leader in this case is the RAFT address
 	// we want the HTTP address, so we'll use this as
 	// a key as we sift through APIPeers
-
 	apiPeers, ok := sMap["metadata"].(map[string]interface{})
 	if !ok {
 		apiPeers = map[string]interface{}{}
@@ -207,7 +212,38 @@ func (conn *Connection) updateClusterInfo() error {
 	}
 
 	if rc.leader.hostname == "" {
-		return errors.New("could not determine leader from API status call")
+		// nodes/ API is available in 6.0+
+		trace("getting leader from metadata failed, trying nodes/")
+		responseBody, err := conn.rqliteApiGet(api_NODES)
+		if err != nil {
+			return errors.New("could not determine leader from API nodes call")
+		}
+		trace("%s: updateClusterInfo() back from api call OK", conn.ID)
+
+		nodes := make(map[string]struct {
+			APIAddr   string `json:"api_addr,omitempty"`
+			Addr      string `json:"addr,omitempty"`
+			Reachable bool   `json:"reachable,omitempty"`
+			Leader    bool   `json:"leader"`
+		})
+		err = json.Unmarshal(responseBody, &nodes)
+		if err != nil {
+			return errors.New("could not unmarshal nodes/ response")
+		}
+
+		for _, v := range nodes {
+			if v.Leader {
+				u, err := url.Parse(v.APIAddr)
+				if err != nil {
+					return errors.New("could not parse API address")
+				}
+				trace("nodes/ indicates %s as API Addr", u.String())
+				parts := strings.Split(u.Host, ":")
+				rc.leader = peer{parts[0], parts[1]}
+			}
+		}
+	} else {
+		trace("leader successfully determined using metadata")
 	}
 
 	// dump to trace
