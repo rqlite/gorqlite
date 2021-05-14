@@ -19,11 +19,15 @@ package gorqlite
 		Open, TraceOn(), TraceOff()
 */
 
-import "crypto/rand"
-import "fmt"
-import "io"
-import "io/ioutil"
-import "strings"
+import (
+	"crypto/rand"
+	"crypto/tls"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"strings"
+)
 
 /* *****************************************************************
 
@@ -51,6 +55,8 @@ const (
 	api_WRITE
 	api_NODES
 )
+
+var InsecureSkipVerify bool
 
 /* *****************************************************************
 
@@ -111,6 +117,11 @@ func Open(connURL string) (Connection, error) {
 	err = conn.initConnection(connURL)
 	if err != nil {
 		return conn, err
+	}
+
+	if conn.wantsHTTPS {
+		// allow using self signed certificates
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: InsecureSkipVerify}
 	}
 
 	// call updateClusterInfo() to populate the cluster
