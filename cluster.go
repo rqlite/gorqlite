@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"strings"
 )
@@ -238,8 +239,11 @@ func (conn *Connection) updateClusterInfo() error {
 					return errors.New("could not parse API address")
 				}
 				trace("nodes/ indicates %s as API Addr", u.String())
-				parts := strings.Split(u.Host, ":")
-				rc.leader = peer{parts[0], parts[1]}
+				var host, port string
+				if host, port, err = net.SplitHostPort(u.Host); err != nil {
+					return fmt.Errorf("could not split host: %s", err)
+				}
+				rc.leader = peer{host, port}
 			}
 		}
 	} else {
