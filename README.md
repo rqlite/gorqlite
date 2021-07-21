@@ -136,6 +136,24 @@ gorqlite.TraceOn(os.Stderr)
 
 // turn off
 gorqlite.TraceOff()
+
+
+// using prepared statements
+wr, err := conn.WritePrepared(
+	[]*gorqlite.PreparedStatement{
+		{
+            Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+            Arguments: []interface{}{7, "James Bond", []byte{0x42}}
+        }
+	}
+)
+// alternatively
+wr, err := conn.WriteOnePrepared(
+	&gorqlite.PreparedStatement{
+        Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+        Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+    },
+)
 ```
 ## Important Notes
 

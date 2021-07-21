@@ -70,6 +70,16 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 	return wra[0], err
 }
 
+func (conn *Connection) WriteOnePrepared(statement *PreparedStatement) (wr WriteResult, err error) {
+	if conn.hasBeenClosed {
+		wr.Err = errClosed
+		return wr, errClosed
+	}
+	wra, err := conn.WritePrepared([]*PreparedStatement{statement})
+	return wra[0], err
+}
+
+
 /*
 Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
 
@@ -92,6 +102,98 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
 	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements)
+	if err != nil {
+		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
+		var errResult WriteResult
+		errResult.Err = err
+		results = append(results, errResult)
+		return results, err
+	}
+	trace("%s: rqliteApiCall() OK", conn.ID)
+
+	var sections map[string]interface{}
+	err = json.Unmarshal(response, &sections)
+	if err != nil {
+		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
+		var errResult WriteResult
+		errResult.Err = err
+		results = append(results, errResult)
+		return results, err
+	}
+
+	/*
+		at this point, we have a "results" section and
+		a "time" section.  we can igore the latter.
+	*/
+
+	resultsArray, ok := sections["results"].([]interface{})
+	if !ok {
+		err = errors.New("Result key is missing from response")
+		trace("%s: sections[\"results\"] ERROR: %s", conn.ID, err)
+		var errResult WriteResult
+		errResult.Err = err
+		results = append(results, errResult)
+		return results, err
+	}
+	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
+	numStatementErrors := 0
+	for n, k := range resultsArray {
+		trace("%s: starting on result %d", conn.ID, n)
+		thisResult := k.(map[string]interface{})
+
+		var thisWR WriteResult
+		thisWR.conn = conn
+
+		// did we get an error?
+		_, ok := thisResult["error"]
+		if ok {
+			trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
+			thisWR.Err = errors.New(thisResult["error"].(string))
+			results = append(results, thisWR)
+			numStatementErrors += 1
+			continue
+		}
+
+		_, ok = thisResult["last_insert_id"]
+		if ok {
+			thisWR.LastInsertID = int64(thisResult["last_insert_id"].(float64))
+		}
+
+		_, ok = thisResult["rows_affected"] // could be zero for a CREATE
+		if ok {
+			thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
+		}
+		_, ok = thisResult["time"] // could be nil
+		if ok {
+			thisWR.Timing = thisResult["time"].(float64)
+		}
+
+		trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
+		results = append(results, thisWR)
+	}
+
+	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
+
+	if numStatementErrors > 0 {
+		return results, errors.New(fmt.Sprintf("there were %d statement errors", numStatementErrors))
+	} else {
+		return results, nil
+	}
+}
+
+func (conn *Connection) WritePrepared(sqlStatements []*PreparedStatement) (results []WriteResult, err error) {
+	results = make([]WriteResult, 0)
+
+	if conn.hasBeenClosed {
+		var errResult WriteResult
+		errResult.Err = errClosed
+		results = append(results, errResult)
+		return results, errClosed
+	}
+
+	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
+
+	response, err := conn.rqliteApiPostPrepared(api_WRITE, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult WriteResult
