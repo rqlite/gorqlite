@@ -105,12 +105,21 @@ func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error
 	return qra[0], err
 }
 
+func (conn *Connection) QueryOnePrepared(statement *PreparedStatement) (qr QueryResult, err error) {
+	if conn.hasBeenClosed {
+		qr.Err = errClosed
+		return qr, errClosed
+	}
+	qra, err := conn.QueryPrepared([]*PreparedStatement{statement})
+	return qra[0], err
+}
+
 /*
-Query() is used to perform SELECT operations in the database.
+QueryPrepared() is used to perform SELECT operations in the database.
 
 It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
 */
-func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
+func (conn *Connection) QueryPrepared(sqlStatements []*PreparedStatement) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {
@@ -122,7 +131,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
 	// if we get an error POSTing, that's a showstopper
-	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements)
+	response, err := conn.rqliteApiPostPrepared(api_QUERY, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult QueryResult
@@ -201,6 +210,22 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 	} else {
 		return results, nil
 	}
+}
+
+/*
+Query() is used to perform SELECT operations in the database.
+
+It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
+*/
+
+func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
+	preparedStatements := make([]*PreparedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		preparedStatements = append(preparedStatements, &PreparedStatement{
+			Query:     sqlStatement,
+		})
+	}
+	return conn.QueryPrepared(preparedStatements)
 }
 
 /* *****************************************************************

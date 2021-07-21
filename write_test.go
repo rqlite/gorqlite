@@ -1,6 +1,9 @@
 package gorqlite
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // import "os"
 
@@ -49,6 +52,25 @@ func TestWriteOne(t *testing.T) {
 		t.Fail()
 	}
 
+	t.Logf("trying WriteOne INSERT")
+	wr, err = conn.WriteOnePrepared(
+		&PreparedStatement{
+			Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+			Arguments: []interface{}{1, "aaa bbb ccc"},
+		},
+	)
+
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("checking WriteOnePrepared RowsAffected")
+	if wr.RowsAffected != 1 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
 	t.Logf("trying WriteOne DROP")
 	wr, err = conn.WriteOne("DROP TABLE IF EXISTS " + testTableName() + "")
 	if err != nil {
@@ -87,6 +109,36 @@ func TestWrite(t *testing.T) {
 	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 3, 'ggg hhh iii' )")
 	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 4, 'jjj kkk lll' )")
 	results, err = conn.Write(s)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	if len(results) != 4 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying Write INSERT")
+	results, err = conn.WritePrepared(
+		[]*PreparedStatement{
+			{
+				Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+		},
+	)
 	if err != nil {
 		t.Logf("--> FAILED")
 		t.Fail()

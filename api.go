@@ -4,7 +4,7 @@ package gorqlite
 	this file has low level stuff:
 
 	rqliteApiGet()
-	rqliteApiPost()
+	rqliteApiPostPrepared()
 
 	There is some code duplication between those and they should
 	probably be combined into one function.
@@ -107,7 +107,7 @@ PeerLoop:
 
 /* *****************************************************************
 
-   method: rqliteApiPost() - for api_QUERY and api_WRITE
+   method: rqliteApiPostPrepared() - for api_QUERY and api_WRITE
 
 	- lowest level interface - does not do any JSON unmarshaling
  	- handles 301s, etc.
@@ -119,95 +119,6 @@ PeerLoop:
 
  * *****************************************************************/
 
-func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string) ([]byte, error) {
-	var responseBody []byte
-
-	switch apiOp {
-	case api_QUERY:
-		trace("%s: rqliteApiGet() post called for a QUERY of %d statements", conn.ID, len(sqlStatements))
-	case api_WRITE:
-		trace("%s: rqliteApiGet() post called for a QUERY of %d statements", conn.ID, len(sqlStatements))
-	default:
-		return responseBody, errors.New("weird! called for an invalid apiOperation in rqliteApiPost()")
-	}
-
-	// jsonify the statements.  not really needed in the
-	// case of api_STATUS but doesn't hurt
-
-	jStatements, err := json.Marshal(sqlStatements)
-	if err != nil {
-		return nil, err
-	}
-
-	// just to be safe, check this
-	peersToTry := conn.cluster.makePeerList()
-	if len(peersToTry) < 1 {
-		return responseBody, errors.New("I don't have any cluster info")
-	}
-
-	// failure log is used so that if all peers fail, we can say something
-	// about why each failed
-	failureLog := make([]string, 0)
-
-PeerLoop:
-	for peerNum, peer := range peersToTry {
-		trace("%s: trying peer #%d", conn.ID, peerNum)
-
-		// we're doing a post, and the RFCs say that if you get a 301, it's not
-		// automatically followed, so we have to do that ourselves
-
-		responseStatus := "Haven't Tried Yet"
-		var url string
-		for responseStatus == "Haven't Tried Yet" || responseStatus == "301 Moved Permanently" {
-			url = conn.assembleURL(apiOp, peer)
-			req, err := http.NewRequest("POST", url, bytes.NewBuffer(jStatements))
-			if err != nil {
-				trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
-				failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
-				continue PeerLoop
-			}
-			req.Header.Set("Content-Type", "application/json")
-			client := &http.Client{}
-			response, err := client.Do(req)
-			if err != nil {
-				trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
-				failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
-				continue PeerLoop
-			}
-			defer response.Body.Close()
-			responseBody, err = ioutil.ReadAll(response.Body)
-			if err != nil {
-				trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
-				failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
-				continue PeerLoop
-			}
-			responseStatus = response.Status
-			if responseStatus == "301 Moved Permanently" {
-				v := response.Header["Location"]
-				failureLog = append(failureLog, fmt.Sprintf("%s redirected me to %s", url, v[0]))
-				url = v[0]
-				continue PeerLoop
-			} else if responseStatus == "200 OK" {
-				trace("%s: api call OK, returning", conn.ID)
-				return responseBody, nil
-			} else {
-				trace("%s: got error in responseStatus: %s", conn.ID, responseStatus)
-				failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s", url, response.Status))
-				continue PeerLoop
-			}
-		}
-	}
-
-	// if we got here, all peers failed.  Let's build a verbose error message
-	var stringBuffer bytes.Buffer
-	stringBuffer.WriteString("tried all peers unsuccessfully. here are the results:\n")
-	for n, v := range failureLog {
-		stringBuffer.WriteString(fmt.Sprintf("   peer #%d: %s\n", n, v))
-	}
-	return responseBody, errors.New(stringBuffer.String())
-}
-
-
 func (conn *Connection) rqliteApiPostPrepared(apiOp apiOperation, sqlStatements []*PreparedStatement) ([]byte, error) {
 	var responseBody []byte
 
@@ -217,7 +128,7 @@ func (conn *Connection) rqliteApiPostPrepared(apiOp apiOperation, sqlStatements 
 	case api_WRITE:
 		trace("%s: rqliteApiGet() post called for a QUERY of %d statements", conn.ID, len(sqlStatements))
 	default:
-		return responseBody, errors.New("weird! called for an invalid apiOperation in rqliteApiPost()")
+		return responseBody, errors.New("weird! called for an invalid apiOperation in rqliteApiPostPrepared()")
 	}
 
 	// jsonify the statements.  not really needed in the
@@ -229,7 +140,7 @@ func (conn *Connection) rqliteApiPostPrepared(apiOp apiOperation, sqlStatements 
 	for _, statement := range sqlStatements {
 		formattedStatement := make([]interface{}, 0, len(statement.Arguments)+1)
 		formattedStatement = append(formattedStatement, statement.Query)
-		
+
 		for _, argument := range statement.Arguments {
 			formattedStatement = append(formattedStatement, argument)
 		}
