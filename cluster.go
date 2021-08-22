@@ -172,6 +172,7 @@ func (conn *Connection) processClusterInfoBody(responseBody []byte, rc *rqliteCl
 	if err != nil {
 		return err
 	}
+
 	sMap := sections["store"].(map[string]interface{})
 	leaderMap, ok := sMap["leader"].(map[string]interface{})
 	var leaderRaftAddr string
@@ -182,9 +183,19 @@ func (conn *Connection) processClusterInfoBody(responseBody []byte, rc *rqliteCl
 	}
 	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
 
+	var clusterApiPort string
+	if cMap, ok := sections["cluster"].(map[string]interface{}); ok {
+		if parts := strings.Split(fmt.Sprint(cMap["api_addr"]), ":"); len(parts) > 1 {
+			clusterApiPort = parts[1]
+		}
+	}
+	if clusterApiPort == "" {
+		return fmt.Errorf("should not happen - could not find cluster API port info")
+	}
+
 	if lAddr, ok := leaderMap["addr"].(string); ok {
 		parts := strings.Split(lAddr, ":")
-		rc.leader = peer{parts[0], parts[1]}
+		rc.leader = peer{parts[0], clusterApiPort}
 	} else {
 		// In 5.x and earlier, "metadata" is available
 		// leader in this case is the RAFT address
@@ -212,7 +223,7 @@ func (conn *Connection) processClusterInfoBody(responseBody []byte, rc *rqliteCl
 					continue
 				}
 				parts := strings.Split(fmt.Sprint(n["addr"]), ":")
-				rc.otherPeers = append(rc.otherPeers, peer{parts[0], parts[1]})
+				rc.otherPeers = append(rc.otherPeers, peer{parts[0], clusterApiPort})
 			}
 		}
 	}
