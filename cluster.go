@@ -166,19 +166,7 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 
  * *****************************************************************/
 
-func (conn *Connection) updateClusterInfo() error {
-	trace("%s: updateClusterInfo() called", conn.ID)
-
-	// start with a fresh new cluster
-	var rc rqliteCluster
-	rc.conn = conn
-
-	responseBody, err := conn.rqliteApiGet(api_STATUS)
-	if err != nil {
-		return err
-	}
-	trace("%s: updateClusterInfo() back from api call OK", conn.ID)
-
+func (conn *Connection) processClusterInfoBody(responseBody []byte, rc *rqliteCluster) (err error) {
 	sections := make(map[string]interface{})
 	err = json.Unmarshal(responseBody, &sections)
 	if err != nil {
@@ -194,22 +182,59 @@ func (conn *Connection) updateClusterInfo() error {
 	}
 	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
 
-	// In 5.x and earlier, "metadata" is available
-	// leader in this case is the RAFT address
-	// we want the HTTP address, so we'll use this as
-	// a key as we sift through APIPeers
-	apiPeers, ok := sMap["metadata"].(map[string]interface{})
-	if !ok {
-		apiPeers = map[string]interface{}{}
-	}
+	if lAddr, ok := leaderMap["addr"].(string); ok {
+		parts := strings.Split(lAddr, ":")
+		rc.leader = peer{parts[0], parts[1]}
+	} else {
+		// In 5.x and earlier, "metadata" is available
+		// leader in this case is the RAFT address
+		// we want the HTTP address, so we'll use this as
+		// a key as we sift through APIPeers
+		apiPeers, ok := sMap["metadata"].(map[string]interface{})
+		if !ok {
+			apiPeers = map[string]interface{}{}
+		}
 
-	if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
-		if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
-			if peerHttp, ok := _httpAddr["api_addr"]; ok {
-				parts := strings.Split(peerHttp.(string), ":")
-				rc.leader = peer{parts[0], parts[1]}
+		if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
+			if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
+				if peerHttp, ok := _httpAddr["api_addr"]; ok {
+					parts := strings.Split(peerHttp.(string), ":")
+					rc.leader = peer{parts[0], parts[1]}
+				}
 			}
 		}
+	}
+
+	if nodes, ok := sMap["nodes"].([]interface{}); ok {
+		for i := range nodes {
+			if n, ok := nodes[i].(map[string]interface{}); ok {
+				if fmt.Sprint(n["id"]) == leaderRaftAddr {
+					continue
+				}
+				parts := strings.Split(fmt.Sprint(n["addr"]), ":")
+				rc.otherPeers = append(rc.otherPeers, peer{parts[0], parts[1]})
+			}
+		}
+	}
+
+	return nil
+}
+
+func (conn *Connection) updateClusterInfo() error {
+	trace("%s: updateClusterInfo() called", conn.ID)
+
+	// start with a fresh new cluster
+	var rc rqliteCluster
+	rc.conn = conn
+
+	responseBody, err := conn.rqliteApiGet(api_STATUS)
+	if err != nil {
+		return err
+	}
+	trace("%s: updateClusterInfo() back from api call OK", conn.ID)
+
+	if err = conn.processClusterInfoBody(responseBody, &rc); err != nil {
+		return err
 	}
 
 	if rc.leader.hostname == "" {
@@ -217,7 +242,8 @@ func (conn *Connection) updateClusterInfo() error {
 		trace("getting leader from metadata failed, trying nodes/")
 		responseBody, err := conn.rqliteApiGet(api_NODES)
 		if err != nil {
-			return errors.New("could not determine leader from API nodes call")
+			// return errors.New("could not determine leader from API nodes call")
+			return fmt.Errorf("could not determine leader from API nodes call: %v",err.Error())
 		}
 		trace("%s: updateClusterInfo() back from api call OK", conn.ID)
 
