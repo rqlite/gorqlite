@@ -11,6 +11,8 @@ rqlite is the distributed consistent sqlite database.  [Learn more about rqlite 
 
 gorqlite should be considered alpha until more testers share their experiences.  See TODO below.
 
+This fork of gorlqite supports rqlite 6.x and later.
+
 ## Features
 
 * Abstracts the rqlite http API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an iterator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}.

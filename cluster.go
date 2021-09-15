@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strings"
 )
 
 /* *****************************************************************
@@ -166,125 +165,24 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 
  * *****************************************************************/
 
-func (conn *Connection) processClusterInfoBody(responseBody []byte, rc *rqliteCluster) (err error) {
-	sections := make(map[string]interface{})
-	err = json.Unmarshal(responseBody, &sections)
-	if err != nil {
-		return err
-	}
-
-	sMap := sections["store"].(map[string]interface{})
-	leaderMap, ok := sMap["leader"].(map[string]interface{})
-	var leaderRaftAddr string
-	if ok {
-		leaderRaftAddr = leaderMap["node_id"].(string)
-	} else {
-		leaderRaftAddr = sMap["leader"].(string)
-	}
-	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
-
-	var clusterApiPort string
-	if cMap, ok := sections["cluster"].(map[string]interface{}); ok {
-		if parts := strings.Split(fmt.Sprint(cMap["api_addr"]), ":"); len(parts) > 1 {
-			clusterApiPort = parts[1]
-		}
-	}
-	if clusterApiPort == "" {
-		return fmt.Errorf("should not happen - could not find cluster API port info")
-	}
-
-	if lAddr, ok := leaderMap["addr"].(string); ok {
-		parts := strings.Split(lAddr, ":")
-		rc.leader = peer{parts[0], clusterApiPort}
-	} else {
-		// In 5.x and earlier, "metadata" is available
-		// leader in this case is the RAFT address
-		// we want the HTTP address, so we'll use this as
-		// a key as we sift through APIPeers
-		apiPeers, ok := sMap["metadata"].(map[string]interface{})
-		if !ok {
-			apiPeers = map[string]interface{}{}
-		}
-
-		if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
-			if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
-				if peerHttp, ok := _httpAddr["api_addr"]; ok {
-					parts := strings.Split(peerHttp.(string), ":")
-					rc.leader = peer{parts[0], parts[1]}
-				}
-			}
-		}
-	}
-
-	if nodes, ok := sMap["nodes"].([]interface{}); ok {
-		for i := range nodes {
-			if n, ok := nodes[i].(map[string]interface{}); ok {
-				if fmt.Sprint(n["id"]) == leaderRaftAddr {
-					continue
-				}
-				parts := strings.Split(fmt.Sprint(n["addr"]), ":")
-				rc.otherPeers = append(rc.otherPeers, peer{parts[0], clusterApiPort})
-			}
-		}
-	}
-
-	return nil
-}
-
-func (conn *Connection) updateClusterInfo() error {
+func (conn *Connection) updateClusterInfo() (err error) {
 	trace("%s: updateClusterInfo() called", conn.ID)
 
 	// start with a fresh new cluster
 	var rc rqliteCluster
 	rc.conn = conn
 
-	responseBody, err := conn.rqliteApiGet(api_STATUS)
+	// nodes/ API is available in 6.0+
+	trace("getting leader from /nodes")
+	responseBody, err := conn.rqliteApiGet(api_NODES)
 	if err != nil {
-		return err
+		// return errors.New("could not determine leader from API nodes call")
+		return fmt.Errorf("could not determine leader from API nodes call: %v", err.Error())
 	}
 	trace("%s: updateClusterInfo() back from api call OK", conn.ID)
 
-	if err = conn.processClusterInfoBody(responseBody, &rc); err != nil {
-		return err
-	}
-
-	if rc.leader.hostname == "" {
-		// nodes/ API is available in 6.0+
-		trace("getting leader from metadata failed, trying nodes/")
-		responseBody, err := conn.rqliteApiGet(api_NODES)
-		if err != nil {
-			// return errors.New("could not determine leader from API nodes call")
-			return fmt.Errorf("could not determine leader from API nodes call: %v",err.Error())
-		}
-		trace("%s: updateClusterInfo() back from api call OK", conn.ID)
-
-		nodes := make(map[string]struct {
-			APIAddr   string `json:"api_addr,omitempty"`
-			Addr      string `json:"addr,omitempty"`
-			Reachable bool   `json:"reachable,omitempty"`
-			Leader    bool   `json:"leader"`
-		})
-		err = json.Unmarshal(responseBody, &nodes)
-		if err != nil {
-			return errors.New("could not unmarshal nodes/ response")
-		}
-
-		for _, v := range nodes {
-			if v.Leader {
-				u, err := url.Parse(v.APIAddr)
-				if err != nil {
-					return errors.New("could not parse API address")
-				}
-				trace("nodes/ indicates %s as API Addr", u.String())
-				var host, port string
-				if host, port, err = net.SplitHostPort(u.Host); err != nil {
-					return fmt.Errorf("could not split host: %s", err)
-				}
-				rc.leader = peer{host, port}
-			}
-		}
-	} else {
-		trace("leader successfully determined using metadata")
+	if err = conn.processNodeInfoBody(responseBody, &rc); err != nil {
+		return
 	}
 
 	// dump to trace
@@ -297,5 +195,53 @@ func (conn *Connection) updateClusterInfo() error {
 	// now make it official
 	conn.cluster = rc
 
-	return nil
+	return
+}
+
+/* *****************************************************************
+
+	method: Connection.processNodeInfoBody()
+
+	processes /nodes response from cluster, setting the leader and
+	peers info, skipping unreachable peers
+
+ * *****************************************************************/
+
+func (conn *Connection) processNodeInfoBody(responseBody []byte, rc *rqliteCluster) (err error) {
+	nodes := make(map[string]struct {
+		APIAddr   string `json:"api_addr,omitempty"`
+		Addr      string `json:"addr,omitempty"`
+		Reachable bool   `json:"reachable,omitempty"`
+		Leader    bool   `json:"leader"`
+	})
+	err = json.Unmarshal(responseBody, &nodes)
+	if err != nil {
+		return errors.New("could not unmarshal /nodes response")
+	}
+
+	var peers []peer
+	for _, v := range nodes {
+		// dead peers are not reachable or have no http addr
+		if !v.Reachable || v.APIAddr == "" {
+			continue
+		}
+		u, err := url.Parse(v.APIAddr)
+		if err != nil {
+			return errors.New("could not parse API address")
+		}
+		trace("/nodes indicates %s as API Addr", u.String())
+		var host, port string
+		if host, port, err = net.SplitHostPort(u.Host); err != nil {
+			return fmt.Errorf("could not split host: %s", err)
+		}
+		peer := peer{host, port}
+		if v.Leader {
+			rc.leader = peer
+		} else {
+			peers = append(peers, peer)
+		}
+	}
+	rc.otherPeers = peers
+
+	return
 }
