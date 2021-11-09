@@ -233,17 +233,19 @@ func (conn *Connection) updateClusterInfo() error {
 		}
 
 		for _, v := range nodes {
+			u, err := url.Parse(v.APIAddr)
+			if err != nil {
+				return errors.New("could not parse API address")
+			}
+			var host, port string
+			if host, port, err = net.SplitHostPort(u.Host); err != nil {
+				return fmt.Errorf("could not split host: %s", err)
+			}
+
 			if v.Leader {
-				u, err := url.Parse(v.APIAddr)
-				if err != nil {
-					return errors.New("could not parse API address")
-				}
-				trace("nodes/ indicates %s as API Addr", u.String())
-				var host, port string
-				if host, port, err = net.SplitHostPort(u.Host); err != nil {
-					return fmt.Errorf("could not split host: %s", err)
-				}
 				rc.leader = peer{host, port}
+			} else {
+				rc.otherPeers = append(rc.otherPeers, peer{host, port})
 			}
 		}
 	} else {
