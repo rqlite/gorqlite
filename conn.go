@@ -137,7 +137,9 @@ func (conn *Connection) Peers() ([]string, error) {
 	} else {
 		trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
 	}
-	plist = append(plist, conn.cluster.leader.String())
+	if !conn.cluster.leader.Empty() {
+		plist = append(plist, conn.cluster.leader.String())
+	}
 	for _, p := range conn.cluster.otherPeers {
 		plist = append(plist, p.String())
 	}
