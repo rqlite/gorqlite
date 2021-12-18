@@ -233,6 +233,10 @@ func (conn *Connection) updateClusterInfo() error {
 		}
 
 		for _, v := range nodes {
+			if !v.Reachable {
+				continue
+			}
+
 			u, err := url.Parse(v.APIAddr)
 			if err != nil {
 				return errors.New("could not parse API address")
