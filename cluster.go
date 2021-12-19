@@ -43,6 +43,10 @@ type peer struct {
 	port     string //   "4001" or port, only ever used as a string
 }
 
+func (p *peer) Empty() bool {
+	return p.hostname == "" && p.port == ""
+}
+
 func (p *peer) String() string {
 	return fmt.Sprintf("%s:%s", p.hostname, p.port)
 }
@@ -74,7 +78,9 @@ type rqliteCluster struct {
 func (rc *rqliteCluster) makePeerList() []peer {
 	trace("%s: makePeerList() called", rc.conn.ID)
 	var peerList []peer
-	peerList = append(peerList, rc.leader)
+	if !rc.leader.Empty() {
+		peerList = append(peerList, rc.leader)
+	}
 	for _, p := range rc.otherPeers {
 		peerList = append(peerList, p)
 	}
@@ -233,6 +239,10 @@ func (conn *Connection) updateClusterInfo() error {
 		}
 
 		for _, v := range nodes {
+			if !v.Reachable {
+				continue
+			}
+
 			u, err := url.Parse(v.APIAddr)
 			if err != nil {
 				return errors.New("could not parse API address")
