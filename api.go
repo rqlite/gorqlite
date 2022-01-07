@@ -13,13 +13,15 @@ package gorqlite
 
 */
 
-import "bytes"
-import "encoding/json"
-import "errors"
-import "fmt"
-import "io/ioutil"
-import "net/http"
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"time"
+)
 
 /* *****************************************************************
 
