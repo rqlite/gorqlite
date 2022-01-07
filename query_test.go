@@ -10,7 +10,6 @@ func TestQueryOne(t *testing.T) {
 	var wr WriteResult
 	var qr QueryResult
 	var wResults []WriteResult
-	var qResults []QueryResult
 	var err error
 
 	t.Logf("trying Open")
@@ -56,6 +55,19 @@ func TestQueryOne(t *testing.T) {
 
 	t.Logf("trying QueryOne")
 	qr, err = conn.QueryOne("SELECT name, ts FROM " + testTableName() + " WHERE id > 3")
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying QueryOnePrepared")
+	qr, err = conn.QueryOnePrepared(
+		&PreparedStatement{
+			Query: fmt.Sprintf("SELECT name, ts FROM %s WHERE id > ?", testTableName()),
+			Arguments: []interface{}{3},
+		},
+	)
+
 	if err != nil {
 		t.Logf("--> FAILED")
 		t.Fail()
@@ -171,11 +183,24 @@ func TestQueryOne(t *testing.T) {
 	t2 = append(t2, "SELECT id FROM "+testTableName()+"")
 	t2 = append(t2, "SELECT name FROM "+testTableName()+"")
 	t2 = append(t2, "SELECT id,name FROM "+testTableName()+"")
-	qResults, err = conn.Query(t2)
+	_, err = conn.Query(t2)
 	if err == nil {
 		t.Logf("--> FAILED")
 		t.Fail()
 	}
-	_ = qResults
+
+	t.Logf("trying Query after Close")
+	_, err = conn.QueryPrepared(
+		[]*PreparedStatement{
+			{ Query: fmt.Sprintf("SELECT id FROM %s", testTableName()), },
+			{ Query: fmt.Sprintf("SELECT name FROM %s", testTableName()), },
+			{ Query: fmt.Sprintf("SELECT id, name FROM %s", testTableName()), },
+		},
+	)
+
+	if err == nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
 
 }

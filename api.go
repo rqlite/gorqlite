@@ -4,7 +4,7 @@ package gorqlite
 	this file has low level stuff:
 
 	rqliteApiGet()
-	rqliteApiPost()
+	rqliteApiPostPrepared()
 
 	There is some code duplication between those and they should
 	probably be combined into one function.
@@ -20,6 +20,11 @@ import "fmt"
 import "io/ioutil"
 import "net/http"
 import "time"
+
+type PreparedStatement struct {
+	Query     string
+	Arguments []interface{}
+}
 
 /* *****************************************************************
 
@@ -102,7 +107,7 @@ PeerLoop:
 
 /* *****************************************************************
 
-   method: rqliteApiPost() - for api_QUERY and api_WRITE
+   method: rqliteApiPostPrepared() - for api_QUERY and api_WRITE
 
 	- lowest level interface - does not do any JSON unmarshaling
  	- handles 301s, etc.
@@ -114,7 +119,7 @@ PeerLoop:
 
  * *****************************************************************/
 
-func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string) ([]byte, error) {
+func (conn *Connection) rqliteApiPostPrepared(apiOp apiOperation, sqlStatements []*PreparedStatement) ([]byte, error) {
 	var responseBody []byte
 
 	switch apiOp {
@@ -123,13 +128,26 @@ func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string
 	case api_WRITE:
 		trace("%s: rqliteApiGet() post called for a QUERY of %d statements", conn.ID, len(sqlStatements))
 	default:
-		return responseBody, errors.New("weird! called for an invalid apiOperation in rqliteApiPost()")
+		return responseBody, errors.New("weird! called for an invalid apiOperation in rqliteApiPostPrepared()")
 	}
 
 	// jsonify the statements.  not really needed in the
 	// case of api_STATUS but doesn't hurt
 
-	jStatements, err := json.Marshal(sqlStatements)
+
+	formattedStatements := make([][]interface{}, 0, len(sqlStatements))
+
+	for _, statement := range sqlStatements {
+		formattedStatement := make([]interface{}, 0, len(statement.Arguments)+1)
+		formattedStatement = append(formattedStatement, statement.Query)
+
+		for _, argument := range statement.Arguments {
+			formattedStatement = append(formattedStatement, argument)
+		}
+		formattedStatements = append(formattedStatements, formattedStatement)
+	}
+
+	jStatements, err := json.Marshal(formattedStatements)
 	if err != nil {
 		return nil, err
 	}

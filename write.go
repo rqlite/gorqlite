@@ -71,15 +71,52 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 }
 
 /*
+WriteOnePrepared() is a convenience method that wraps WritePrepared() into a single-statement
+method.
+*/
+
+func (conn *Connection) WriteOnePrepared(statement *PreparedStatement) (wr WriteResult, err error) {
+	if conn.hasBeenClosed {
+		wr.Err = errClosed
+		return wr, errClosed
+	}
+	wra, err := conn.WritePrepared([]*PreparedStatement{statement})
+	return wra[0], err
+}
+
+
+/*
 Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
 
 Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
 
 All statements are executed as a single transaction.
 
+Write() uses WritePrepared()
+
 Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
 */
 func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
+	preparedStatements := make([]*PreparedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		preparedStatements = append(preparedStatements, &PreparedStatement{
+			Query:     sqlStatement,
+		})
+	}
+	return conn.WritePrepared(preparedStatements)
+}
+
+/*
+WritePrepared() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
+
+WritePrepared() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
+
+All statements are executed as a single transaction.
+
+WritePrepared() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+*/
+
+func (conn *Connection) WritePrepared(sqlStatements []*PreparedStatement) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
@@ -91,7 +128,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPostPrepared(api_WRITE, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult WriteResult
