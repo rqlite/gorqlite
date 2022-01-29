@@ -264,6 +264,7 @@ func (conn *Connection) initConnection(url string) error {
 	} else {
 		conn.cluster.leader = peer(u.Host)
 	}
+	conn.cluster.peerList = []peer{conn.cluster.leader}
 
 	/*
 

@@ -46,35 +46,25 @@ type peer string
 type rqliteCluster struct {
 	leader     peer
 	otherPeers []peer
-	conn       *Connection
+	// cached list of peers starting with leader
+	peerList []peer
+	conn     *Connection
 }
 
 /* *****************************************************************
 
-  method: rqliteCluster.makePeerList()
+  method: rqliteCluster.PeerList()
 
 	in the api calls, we'll want to try the leader first, then the other
 	peers.  to make looping easy, this function returns a list of peers
 	in the order the try them: leader, other peer, other peer, etc.
+	since the peer list might change only during updateClusterInfo(),
+	we keep it cached
 
  * *****************************************************************/
 
-func (rc *rqliteCluster) makePeerList() []peer {
-	trace("%s: makePeerList() called", rc.conn.ID)
-	peerList := make([]peer, len(rc.otherPeers)+1)
-	if rc.leader != "" {
-		peerList = append(peerList, rc.leader)
-	}
-	for _, p := range rc.otherPeers {
-		peerList = append(peerList, p)
-	}
-
-	trace("%s: makePeerList() returning this list:", rc.conn.ID)
-	for n, v := range peerList {
-		trace("%s: makePeerList() peer %d -> %s", rc.conn.ID, n, v)
-	}
-
-	return peerList
+func (rc *rqliteCluster) PeerList() []peer {
+	return rc.peerList
 }
 
 /* *****************************************************************
@@ -237,6 +227,14 @@ func (conn *Connection) updateClusterInfo() error {
 		}
 	} else {
 		trace("leader successfully determined using metadata")
+	}
+
+	rc.peerList = make([]peer, len(rc.otherPeers)+1)
+	if rc.leader != "" {
+		rc.peerList = append(rc.peerList, rc.leader)
+	}
+	for _, p := range rc.otherPeers {
+		rc.peerList = append(rc.peerList, p)
 	}
 
 	// dump to trace

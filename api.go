@@ -33,7 +33,7 @@ import (
  * *****************************************************************/
 func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
 	// Verify that we have at least a single peer to which we can make the request
-	peers := conn.cluster.makePeerList()
+	peers := conn.cluster.PeerList()
 	if len(peers) < 1 {
 		return nil, errors.New("I don't have any cluster info")
 	}
