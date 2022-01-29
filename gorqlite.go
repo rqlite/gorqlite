@@ -19,11 +19,13 @@ package gorqlite
 		Open, TraceOn(), TraceOff()
 */
 
-import "crypto/rand"
-import "fmt"
-import "io"
-import "io/ioutil"
-import "strings"
+import (
+	"crypto/rand"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"strings"
+)
 
 /* *****************************************************************
 
@@ -40,8 +42,10 @@ const (
 )
 
 // used in several places, actually
-var consistencyLevelNames map[consistencyLevel]string
-var consistencyLevels map[string]consistencyLevel
+var (
+	consistencyLevelNames map[consistencyLevel]string
+	consistencyLevels     map[string]consistencyLevel
+)
 
 type apiOperation int
 
@@ -70,7 +74,6 @@ func init() {
 	consistencyLevels["none"] = cl_NONE
 	consistencyLevels["weak"] = cl_WEAK
 	consistencyLevels["strong"] = cl_STRONG
-
 }
 
 /* *****************************************************************
@@ -104,7 +107,6 @@ func Open(connURL string) (Connection, error) {
 	trace("%s: Open() called for url: %s", conn.ID, connURL)
 
 	// set defaults
-	conn.timeout = 10
 	conn.hasBeenClosed = false
 
 	// parse the URL given

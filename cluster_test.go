@@ -1,11 +1,11 @@
 package gorqlite
 
-import "testing"
-
-import "os"
+import (
+	"os"
+	"testing"
+)
 
 func TestInitCluster(t *testing.T) {
-
 	TraceOn(os.Stderr)
 	t.Logf("trying Open: %s\n", testUrl())
 	conn, err := Open(testUrl())

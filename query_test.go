@@ -177,5 +177,4 @@ func TestQueryOne(t *testing.T) {
 		t.Fail()
 	}
 	_ = qResults
-
 }

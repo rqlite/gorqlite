@@ -15,11 +15,15 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	nurl "net/url"
 )
+
+const defaultTimeout = 10
 
 var (
 	errClosed = errors.New("gorqlite: connection is closed")
@@ -69,9 +73,10 @@ type Connection struct {
 
 	// variables below this line need to be initialized in Open()
 
-	timeout       int    //   10
 	hasBeenClosed bool   //   false
 	ID            string //   generated in init()
+
+	client http.Client
 }
 
 /* *****************************************************************
@@ -286,7 +291,7 @@ func (conn *Connection) initConnection(url string) error {
 	// default
 	conn.consistencyLevel = cl_WEAK
 
-	// parse query
+	// parse query params
 	query := u.Query()
 	if query.Has("level") {
 		cl, ok := consistencyLevels[query.Get("level")]
@@ -295,16 +300,23 @@ func (conn *Connection) initConnection(url string) error {
 		}
 		conn.consistencyLevel = cl
 	}
+
+	timeout := defaultTimeout
 	if query.Has("timeout") {
-		timeout, err := strconv.Atoi(query.Get("timeout"))
+		customTimeout, err := strconv.Atoi(query.Get("timeout"))
 		if err != nil {
 			return errors.New("invalid timeout specified: " + err.Error())
 		}
-		conn.timeout = timeout
+		timeout = customTimeout
 	}
 
 	// Default transaction state
 	conn.wantsTransactions = true
+
+	// Initialize http client for connection
+	conn.client = http.Client{
+		Timeout: time.Second * time.Duration(timeout),
+	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
 	if conn.wantsHTTPS == true {

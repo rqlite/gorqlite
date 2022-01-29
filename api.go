@@ -13,13 +13,14 @@ package gorqlite
 
 */
 
-import "bytes"
-import "encoding/json"
-import "errors"
-import "fmt"
-import "io/ioutil"
-import "net/http"
-import "time"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/http"
+)
 
 /* *****************************************************************
 
@@ -64,9 +65,7 @@ PeerLoop:
 		}
 		trace("%s: http.NewRequest() OK", conn.ID)
 		req.Header.Set("Content-Type", "application/json")
-		client := &http.Client{}
-		client.Timeout = time.Duration(conn.timeout) * time.Second
-		response, err := client.Do(req)
+		response, err := conn.client.Do(req)
 		if err != nil {
 			trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
@@ -162,8 +161,7 @@ PeerLoop:
 				continue PeerLoop
 			}
 			req.Header.Set("Content-Type", "application/json")
-			client := &http.Client{}
-			response, err := client.Do(req)
+			response, err := conn.client.Do(req)
 			if err != nil {
 				trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
 				failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
