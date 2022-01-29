@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -121,7 +120,7 @@ func (conn *Connection) Leader() (string, error) {
 	} else {
 		trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	}
-	return conn.cluster.leader.String(), nil
+	return string(conn.cluster.leader), nil
 }
 
 /* *****************************************************************
@@ -145,11 +144,11 @@ func (conn *Connection) Peers() ([]string, error) {
 	} else {
 		trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
 	}
-	if !conn.cluster.leader.Empty() {
-		plist = append(plist, conn.cluster.leader.String())
+	if conn.cluster.leader != "" {
+		plist = append(plist, string(conn.cluster.leader))
 	}
 	for _, p := range conn.cluster.otherPeers {
-		plist = append(plist, p.String())
+		plist = append(plist, string(p))
 	}
 	return plist, nil
 }
@@ -261,24 +260,9 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	if u.Host == "" {
-		conn.cluster.leader.hostname = "localhost"
+		conn.cluster.leader = "localhost:4001"
 	} else {
-		conn.cluster.leader.hostname = u.Host
-	}
-
-	if u.Host == "" {
-		conn.cluster.leader.hostname = "localhost"
-		conn.cluster.leader.port = "4001"
-	} else {
-		// SplitHostPort() should only return an error if there is no host port.
-		// I think.
-		h, p, err := net.SplitHostPort(u.Host)
-		if err != nil {
-			conn.cluster.leader.hostname = u.Host
-		} else {
-			conn.cluster.leader.hostname = h
-			conn.cluster.leader.port = p
-		}
+		conn.cluster.leader = peer(u.Host)
 	}
 
 	/*
@@ -326,8 +310,7 @@ func (conn *Connection) initConnection(url string) error {
 	}
 	trace("%s:    %s -> %s", conn.ID, "username", conn.username)
 	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
-	trace("%s:    %s -> %s", conn.ID, "hostname", conn.cluster.leader.hostname)
-	trace("%s:    %s -> %s", conn.ID, "port", conn.cluster.leader.port)
+	trace("%s:    %s -> %s", conn.ID, "host", conn.cluster.leader)
 	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
 	trace("%s:    %s -> %s", conn.ID, "wantTransaction", conn.wantsTransactions)
 

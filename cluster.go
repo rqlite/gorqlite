@@ -20,8 +20,6 @@ package gorqlite
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net"
 	"net/url"
 	"strings"
 )
@@ -30,25 +28,12 @@ import (
 
 	type: peer
 
-	this is an internal type to abstact peer info.
-
-	note that hostname is sometimes used for "has this struct been
-	inialized" checks.
+	this is an internal type to abstract peer info, actually just
+	represent a single hostname:port
 
  * *****************************************************************/
 
-type peer struct {
-	hostname string //   hostname or "localhost"
-	port     string //   "4001" or port, only ever used as a string
-}
-
-func (p *peer) Empty() bool {
-	return p.hostname == "" && p.port == ""
-}
-
-func (p *peer) String() string {
-	return fmt.Sprintf("%s:%s", p.hostname, p.port)
-}
+type peer string
 
 /* *****************************************************************
 
@@ -77,7 +62,7 @@ type rqliteCluster struct {
 func (rc *rqliteCluster) makePeerList() []peer {
 	trace("%s: makePeerList() called", rc.conn.ID)
 	peerList := make([]peer, len(rc.otherPeers)+1)
-	if !rc.leader.Empty() {
+	if rc.leader != "" {
 		peerList = append(peerList, rc.leader)
 	}
 	for _, p := range rc.otherPeers {
@@ -86,7 +71,7 @@ func (rc *rqliteCluster) makePeerList() []peer {
 
 	trace("%s: makePeerList() returning this list:", rc.conn.ID)
 	for n, v := range peerList {
-		trace("%s: makePeerList() peer %d -> %s", rc.conn.ID, n, v.hostname+":"+v.port)
+		trace("%s: makePeerList() peer %d -> %s", rc.conn.ID, n, v)
 	}
 
 	return peerList
@@ -122,9 +107,7 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		builder.WriteString(conn.password)
 		builder.WriteString("@")
 	}
-	builder.WriteString(p.hostname)
-	builder.WriteString(":")
-	builder.WriteString(p.port)
+	builder.WriteString(string(p))
 
 	switch apiOp {
 	case api_STATUS:
@@ -211,13 +194,12 @@ func (conn *Connection) updateClusterInfo() error {
 	if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
 		if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
 			if peerHttp, ok := _httpAddr["api_addr"]; ok {
-				parts := strings.Split(peerHttp.(string), ":")
-				rc.leader = peer{parts[0], parts[1]}
+				rc.leader = peer(peerHttp.(string))
 			}
 		}
 	}
 
-	if rc.leader.hostname == "" {
+	if rc.leader == "" {
 		// nodes/ API is available in 6.0+
 		trace("getting leader from metadata failed, trying nodes/")
 		responseBody, err := conn.rqliteApiGet(api_NODES)
@@ -246,15 +228,11 @@ func (conn *Connection) updateClusterInfo() error {
 			if err != nil {
 				return errors.New("could not parse API address")
 			}
-			var host, port string
-			if host, port, err = net.SplitHostPort(u.Host); err != nil {
-				return fmt.Errorf("could not split host: %s", err)
-			}
 
 			if v.Leader {
-				rc.leader = peer{host, port}
+				rc.leader = peer(u.Host)
 			} else {
-				rc.otherPeers = append(rc.otherPeers, peer{host, port})
+				rc.otherPeers = append(rc.otherPeers, peer(u.Host))
 			}
 		}
 	} else {
@@ -263,9 +241,9 @@ func (conn *Connection) updateClusterInfo() error {
 
 	// dump to trace
 	trace("%s: here is my cluster config:", conn.ID)
-	trace("%s: leader   : %s", conn.ID, rc.leader.String())
+	trace("%s: leader   : %s", conn.ID, rc.leader)
 	for n, v := range rc.otherPeers {
-		trace("%s: otherPeer #%d: %s", conn.ID, n, v.String())
+		trace("%s: otherPeer #%d: %s", conn.ID, n, v)
 	}
 
 	// now make it official
