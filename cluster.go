@@ -18,7 +18,6 @@ package gorqlite
  * *****************************************************************/
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,7 +76,7 @@ type rqliteCluster struct {
 
 func (rc *rqliteCluster) makePeerList() []peer {
 	trace("%s: makePeerList() called", rc.conn.ID)
-	var peerList []peer
+	peerList := make([]peer, len(rc.otherPeers)+1)
 	if !rc.leader.Empty() {
 		peerList = append(peerList, rc.leader)
 	}
@@ -109,55 +108,55 @@ func (rc *rqliteCluster) makePeerList() []peer {
  * *****************************************************************/
 
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
-	var stringBuffer bytes.Buffer
+	var builder strings.Builder
 
 	if conn.wantsHTTPS == true {
-		stringBuffer.WriteString("https")
+		builder.WriteString("https")
 	} else {
-		stringBuffer.WriteString("http")
+		builder.WriteString("http")
 	}
-	stringBuffer.WriteString("://")
+	builder.WriteString("://")
 	if conn.username != "" && conn.password != "" {
-		stringBuffer.WriteString(conn.username)
-		stringBuffer.WriteString(":")
-		stringBuffer.WriteString(conn.password)
-		stringBuffer.WriteString("@")
+		builder.WriteString(conn.username)
+		builder.WriteString(":")
+		builder.WriteString(conn.password)
+		builder.WriteString("@")
 	}
-	stringBuffer.WriteString(p.hostname)
-	stringBuffer.WriteString(":")
-	stringBuffer.WriteString(p.port)
+	builder.WriteString(p.hostname)
+	builder.WriteString(":")
+	builder.WriteString(p.port)
 
 	switch apiOp {
 	case api_STATUS:
-		stringBuffer.WriteString("/status")
+		builder.WriteString("/status")
 	case api_NODES:
-		stringBuffer.WriteString("/nodes")
+		builder.WriteString("/nodes")
 	case api_QUERY:
-		stringBuffer.WriteString("/db/query")
+		builder.WriteString("/db/query")
 	case api_WRITE:
-		stringBuffer.WriteString("/db/execute")
+		builder.WriteString("/db/execute")
 	}
 
 	if apiOp == api_QUERY || apiOp == api_WRITE {
-		stringBuffer.WriteString("?timings&level=")
-		stringBuffer.WriteString(consistencyLevelNames[conn.consistencyLevel])
+		builder.WriteString("?timings&level=")
+		builder.WriteString(consistencyLevelNames[conn.consistencyLevel])
 		if conn.wantsTransactions {
-			stringBuffer.WriteString("&transaction")
+			builder.WriteString("&transaction")
 		}
 	}
 
 	switch apiOp {
 	case api_QUERY:
-		trace("%s: assembled URL for an api_QUERY: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_QUERY: %s", conn.ID, builder.String())
 	case api_STATUS:
-		trace("%s: assembled URL for an api_STATUS: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_STATUS: %s", conn.ID, builder.String())
 	case api_NODES:
-		trace("%s: assembled URL for an api_NODES: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_NODES: %s", conn.ID, builder.String())
 	case api_WRITE:
-		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, builder.String())
 	}
 
-	return stringBuffer.String()
+	return builder.String()
 }
 
 /* *****************************************************************
