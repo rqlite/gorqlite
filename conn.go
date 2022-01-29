@@ -278,7 +278,7 @@ func (conn *Connection) initConnection(url string) error {
 
 	// parse query params
 	query := u.Query()
-	if query.Has("level") {
+	if query.Get("level") != "" {
 		cl, ok := consistencyLevels[query.Get("level")]
 		if !ok {
 			return errors.New("invalid consistency level: " + query.Get("level"))
@@ -287,7 +287,7 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	timeout := defaultTimeout
-	if query.Has("timeout") {
+	if query.Get("timeout") != "" {
 		customTimeout, err := strconv.Atoi(query.Get("timeout"))
 		if err != nil {
 			return errors.New("invalid timeout specified: " + err.Error())
