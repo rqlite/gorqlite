@@ -15,13 +15,16 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
+	"strings"
 
 	nurl "net/url"
-	"strings"
 )
 
-var errClosed = errors.New("gorqlite: connection is closed")
-var traceOut io.Writer
+var (
+	errClosed = errors.New("gorqlite: connection is closed")
+	traceOut  io.Writer
+)
 
 // defaults to false.  This is used in trace() to quickly
 // return if tracing is off, so that we don't do a perhaps
@@ -214,7 +217,6 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 */
 
 func (conn *Connection) initConnection(url string) error {
-
 	// do some sanity checks.  You know users.
 
 	if len(url) < 7 {
@@ -284,16 +286,21 @@ func (conn *Connection) initConnection(url string) error {
 	// default
 	conn.consistencyLevel = cl_WEAK
 
-	if u.RawQuery != "" {
-		if u.RawQuery == "level=weak" {
-			// that's ok but nothing to do
-		} else if u.RawQuery == "level=strong" {
-			conn.consistencyLevel = cl_STRONG
-		} else if u.RawQuery == "level=none" { // the fools!
-			conn.consistencyLevel = cl_NONE
-		} else {
-			return errors.New("don't know what to do with this query: " + u.RawQuery)
+	// parse query
+	query := u.Query()
+	if query.Has("level") {
+		cl, ok := consistencyLevels[query.Get("level")]
+		if !ok {
+			return errors.New("invalid consistency level: " + query.Get("level"))
 		}
+		conn.consistencyLevel = cl
+	}
+	if query.Has("timeout") {
+		timeout, err := strconv.Atoi(query.Get("timeout"))
+		if err != nil {
+			return errors.New("invalid timeout specified: " + err.Error())
+		}
+		conn.timeout = timeout
 	}
 
 	// Default transaction state
