@@ -55,7 +55,6 @@ func TestWriteOne(t *testing.T) {
 		t.Logf("--> FAILED")
 		t.Fail()
 	}
-
 }
 
 func TestWrite(t *testing.T) {
@@ -104,5 +103,4 @@ func TestWrite(t *testing.T) {
 		t.Logf("--> FAILED")
 		t.Fail()
 	}
-
 }

@@ -18,11 +18,8 @@ package gorqlite
  * *****************************************************************/
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net"
 	"net/url"
 	"strings"
 )
@@ -31,25 +28,12 @@ import (
 
 	type: peer
 
-	this is an internal type to abstact peer info.
-
-	note that hostname is sometimes used for "has this struct been
-	inialized" checks.
+	this is an internal type to abstract peer info, actually just
+	represent a single hostname:port
 
  * *****************************************************************/
 
-type peer struct {
-	hostname string //   hostname or "localhost"
-	port     string //   "4001" or port, only ever used as a string
-}
-
-func (p *peer) Empty() bool {
-	return p.hostname == "" && p.port == ""
-}
-
-func (p *peer) String() string {
-	return fmt.Sprintf("%s:%s", p.hostname, p.port)
-}
+type peer string
 
 /* *****************************************************************
 
@@ -62,35 +46,25 @@ func (p *peer) String() string {
 type rqliteCluster struct {
 	leader     peer
 	otherPeers []peer
-	conn       *Connection
+	// cached list of peers starting with leader
+	peerList []peer
+	conn     *Connection
 }
 
 /* *****************************************************************
 
-  method: rqliteCluster.makePeerList()
+  method: rqliteCluster.PeerList()
 
 	in the api calls, we'll want to try the leader first, then the other
 	peers.  to make looping easy, this function returns a list of peers
 	in the order the try them: leader, other peer, other peer, etc.
+	since the peer list might change only during updateClusterInfo(),
+	we keep it cached
 
  * *****************************************************************/
 
-func (rc *rqliteCluster) makePeerList() []peer {
-	trace("%s: makePeerList() called", rc.conn.ID)
-	var peerList []peer
-	if !rc.leader.Empty() {
-		peerList = append(peerList, rc.leader)
-	}
-	for _, p := range rc.otherPeers {
-		peerList = append(peerList, p)
-	}
-
-	trace("%s: makePeerList() returning this list:", rc.conn.ID)
-	for n, v := range peerList {
-		trace("%s: makePeerList() peer %d -> %s", rc.conn.ID, n, v.hostname+":"+v.port)
-	}
-
-	return peerList
+func (rc *rqliteCluster) PeerList() []peer {
+	return rc.peerList
 }
 
 /* *****************************************************************
@@ -109,55 +83,53 @@ func (rc *rqliteCluster) makePeerList() []peer {
  * *****************************************************************/
 
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
-	var stringBuffer bytes.Buffer
+	var builder strings.Builder
 
 	if conn.wantsHTTPS == true {
-		stringBuffer.WriteString("https")
+		builder.WriteString("https")
 	} else {
-		stringBuffer.WriteString("http")
+		builder.WriteString("http")
 	}
-	stringBuffer.WriteString("://")
+	builder.WriteString("://")
 	if conn.username != "" && conn.password != "" {
-		stringBuffer.WriteString(conn.username)
-		stringBuffer.WriteString(":")
-		stringBuffer.WriteString(conn.password)
-		stringBuffer.WriteString("@")
+		builder.WriteString(conn.username)
+		builder.WriteString(":")
+		builder.WriteString(conn.password)
+		builder.WriteString("@")
 	}
-	stringBuffer.WriteString(p.hostname)
-	stringBuffer.WriteString(":")
-	stringBuffer.WriteString(p.port)
+	builder.WriteString(string(p))
 
 	switch apiOp {
 	case api_STATUS:
-		stringBuffer.WriteString("/status")
+		builder.WriteString("/status")
 	case api_NODES:
-		stringBuffer.WriteString("/nodes")
+		builder.WriteString("/nodes")
 	case api_QUERY:
-		stringBuffer.WriteString("/db/query")
+		builder.WriteString("/db/query")
 	case api_WRITE:
-		stringBuffer.WriteString("/db/execute")
+		builder.WriteString("/db/execute")
 	}
 
 	if apiOp == api_QUERY || apiOp == api_WRITE {
-		stringBuffer.WriteString("?timings&level=")
-		stringBuffer.WriteString(consistencyLevelNames[conn.consistencyLevel])
+		builder.WriteString("?timings&level=")
+		builder.WriteString(consistencyLevelNames[conn.consistencyLevel])
 		if conn.wantsTransactions {
-			stringBuffer.WriteString("&transaction")
+			builder.WriteString("&transaction")
 		}
 	}
 
 	switch apiOp {
 	case api_QUERY:
-		trace("%s: assembled URL for an api_QUERY: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_QUERY: %s", conn.ID, builder.String())
 	case api_STATUS:
-		trace("%s: assembled URL for an api_STATUS: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_STATUS: %s", conn.ID, builder.String())
 	case api_NODES:
-		trace("%s: assembled URL for an api_NODES: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_NODES: %s", conn.ID, builder.String())
 	case api_WRITE:
-		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, stringBuffer.String())
+		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, builder.String())
 	}
 
-	return stringBuffer.String()
+	return builder.String()
 }
 
 /* *****************************************************************
@@ -212,13 +184,12 @@ func (conn *Connection) updateClusterInfo() error {
 	if apiAddrMap, ok := apiPeers[leaderRaftAddr]; ok {
 		if _httpAddr, ok := apiAddrMap.(map[string]interface{}); ok {
 			if peerHttp, ok := _httpAddr["api_addr"]; ok {
-				parts := strings.Split(peerHttp.(string), ":")
-				rc.leader = peer{parts[0], parts[1]}
+				rc.leader = peer(peerHttp.(string))
 			}
 		}
 	}
 
-	if rc.leader.hostname == "" {
+	if rc.leader == "" {
 		// nodes/ API is available in 6.0+
 		trace("getting leader from metadata failed, trying nodes/")
 		responseBody, err := conn.rqliteApiGet(api_NODES)
@@ -247,26 +218,30 @@ func (conn *Connection) updateClusterInfo() error {
 			if err != nil {
 				return errors.New("could not parse API address")
 			}
-			var host, port string
-			if host, port, err = net.SplitHostPort(u.Host); err != nil {
-				return fmt.Errorf("could not split host: %s", err)
-			}
 
 			if v.Leader {
-				rc.leader = peer{host, port}
+				rc.leader = peer(u.Host)
 			} else {
-				rc.otherPeers = append(rc.otherPeers, peer{host, port})
+				rc.otherPeers = append(rc.otherPeers, peer(u.Host))
 			}
 		}
 	} else {
 		trace("leader successfully determined using metadata")
 	}
 
+	rc.peerList = make([]peer, len(rc.otherPeers)+1)
+	if rc.leader != "" {
+		rc.peerList = append(rc.peerList, rc.leader)
+	}
+	for _, p := range rc.otherPeers {
+		rc.peerList = append(rc.peerList, p)
+	}
+
 	// dump to trace
 	trace("%s: here is my cluster config:", conn.ID)
-	trace("%s: leader   : %s", conn.ID, rc.leader.String())
+	trace("%s: leader   : %s", conn.ID, rc.leader)
 	for n, v := range rc.otherPeers {
-		trace("%s: otherPeer #%d: %s", conn.ID, n, v.String())
+		trace("%s: otherPeer #%d: %s", conn.ID, n, v)
 	}
 
 	// now make it official

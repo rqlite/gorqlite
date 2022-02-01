@@ -94,9 +94,9 @@ var name string
 rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
 fmt.Printf("query returned %d rows\n",rows.NumRows)
 for rows.Next() {
-	err := response.Scan(&id, &name)
-	fmt.Printf("this is row number %d\n",response.RowNumber)
-	fmt.Printf("there are %d rows overall%d\n",response.NumRows)
+	err := rows.Scan(&id, &name)
+	fmt.Printf("this is row number %d\n",rows.RowNumber)
+	fmt.Printf("there are %d rows overall%d\n",rows.NumRows)
 }
 
 // just like WriteOne()/Write(), QueryOne() takes a single statement,
@@ -107,7 +107,7 @@ for rows.Next() {
 // alternatively, use Next()/Map()
 
 for rows.Next() {
-	m, err := response.Map()
+	m, err := rows.Map()
 	// m is now a map[column name as string]interface{}
 	id := m["name"].(float64) // the only json number type
 	name := m["name"].(string)

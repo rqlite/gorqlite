@@ -14,14 +14,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	nurl "net/url"
-	"strings"
 )
 
-var errClosed = errors.New("gorqlite: connection is closed")
-var traceOut io.Writer
+const defaultTimeout = 10
+
+var (
+	errClosed = errors.New("gorqlite: connection is closed")
+	traceOut  io.Writer
+)
 
 // defaults to false.  This is used in trace() to quickly
 // return if tracing is off, so that we don't do a perhaps
@@ -66,9 +72,10 @@ type Connection struct {
 
 	// variables below this line need to be initialized in Open()
 
-	timeout       int    //   10
 	hasBeenClosed bool   //   false
 	ID            string //   generated in init()
+
+	client http.Client
 }
 
 /* *****************************************************************
@@ -113,7 +120,7 @@ func (conn *Connection) Leader() (string, error) {
 	} else {
 		trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	}
-	return conn.cluster.leader.String(), nil
+	return string(conn.cluster.leader), nil
 }
 
 /* *****************************************************************
@@ -137,11 +144,11 @@ func (conn *Connection) Peers() ([]string, error) {
 	} else {
 		trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
 	}
-	if !conn.cluster.leader.Empty() {
-		plist = append(plist, conn.cluster.leader.String())
+	if conn.cluster.leader != "" {
+		plist = append(plist, string(conn.cluster.leader))
 	}
 	for _, p := range conn.cluster.otherPeers {
-		plist = append(plist, p.String())
+		plist = append(plist, string(p))
 	}
 	return plist, nil
 }
@@ -214,7 +221,6 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 */
 
 func (conn *Connection) initConnection(url string) error {
-
 	// do some sanity checks.  You know users.
 
 	if len(url) < 7 {
@@ -254,25 +260,11 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	if u.Host == "" {
-		conn.cluster.leader.hostname = "localhost"
+		conn.cluster.leader = "localhost:4001"
 	} else {
-		conn.cluster.leader.hostname = u.Host
+		conn.cluster.leader = peer(u.Host)
 	}
-
-	if u.Host == "" {
-		conn.cluster.leader.hostname = "localhost"
-		conn.cluster.leader.port = "4001"
-	} else {
-		// SplitHostPort() should only return an error if there is no host port.
-		// I think.
-		h, p, err := net.SplitHostPort(u.Host)
-		if err != nil {
-			conn.cluster.leader.hostname = u.Host
-		} else {
-			conn.cluster.leader.hostname = h
-			conn.cluster.leader.port = p
-		}
-	}
+	conn.cluster.peerList = []peer{conn.cluster.leader}
 
 	/*
 
@@ -284,20 +276,32 @@ func (conn *Connection) initConnection(url string) error {
 	// default
 	conn.consistencyLevel = cl_WEAK
 
-	if u.RawQuery != "" {
-		if u.RawQuery == "level=weak" {
-			// that's ok but nothing to do
-		} else if u.RawQuery == "level=strong" {
-			conn.consistencyLevel = cl_STRONG
-		} else if u.RawQuery == "level=none" { // the fools!
-			conn.consistencyLevel = cl_NONE
-		} else {
-			return errors.New("don't know what to do with this query: " + u.RawQuery)
+	// parse query params
+	query := u.Query()
+	if query.Get("level") != "" {
+		cl, ok := consistencyLevels[query.Get("level")]
+		if !ok {
+			return errors.New("invalid consistency level: " + query.Get("level"))
 		}
+		conn.consistencyLevel = cl
+	}
+
+	timeout := defaultTimeout
+	if query.Get("timeout") != "" {
+		customTimeout, err := strconv.Atoi(query.Get("timeout"))
+		if err != nil {
+			return errors.New("invalid timeout specified: " + err.Error())
+		}
+		timeout = customTimeout
 	}
 
 	// Default transaction state
 	conn.wantsTransactions = true
+
+	// Initialize http client for connection
+	conn.client = http.Client{
+		Timeout: time.Second * time.Duration(timeout),
+	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
 	if conn.wantsHTTPS == true {
@@ -307,8 +311,7 @@ func (conn *Connection) initConnection(url string) error {
 	}
 	trace("%s:    %s -> %s", conn.ID, "username", conn.username)
 	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
-	trace("%s:    %s -> %s", conn.ID, "hostname", conn.cluster.leader.hostname)
-	trace("%s:    %s -> %s", conn.ID, "port", conn.cluster.leader.port)
+	trace("%s:    %s -> %s", conn.ID, "host", conn.cluster.leader)
 	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
 	trace("%s:    %s -> %s", conn.ID, "wantTransaction", conn.wantsTransactions)
 
