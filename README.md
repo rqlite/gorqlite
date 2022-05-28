@@ -139,7 +139,7 @@ gorqlite.TraceOff()
 ```
 
 ### Queued Writes
-The client does support Queued Writes. Instead of calling the `Write()` functions, call the queueing versions instead.
+The client does support [Queued Writes](https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md). Instead of calling the `Write()` functions, call the queueing versions instead.
 ```go
 var seq int64
 var err error
