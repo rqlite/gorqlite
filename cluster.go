@@ -116,6 +116,9 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		if conn.wantsTransactions {
 			builder.WriteString("&transaction")
 		}
+		if apiOp == api_WRITE && conn.wantsQueueing {
+			builder.WriteString("&queue")
+		}
 	}
 
 	switch apiOp {

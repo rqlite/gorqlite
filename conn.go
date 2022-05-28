@@ -69,6 +69,7 @@ type Connection struct {
 	consistencyLevel  consistencyLevel //   WEAK
 	wantsHTTPS        bool             //   false unless connection URL is https
 	wantsTransactions bool             //   true unless user states otherwise
+	wantsQueueing     bool             //   perform queued writes
 
 	// variables below this line need to be initialized in Open()
 
@@ -313,7 +314,7 @@ func (conn *Connection) initConnection(url string) error {
 	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
 	trace("%s:    %s -> %s", conn.ID, "host", conn.cluster.leader)
 	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
-	trace("%s:    %s -> %s", conn.ID, "wantTransaction", conn.wantsTransactions)
+	trace("%s:    %s -> %s", conn.ID, "wantsTransaction", conn.wantsTransactions)
 
 	conn.cluster.conn = conn
 
