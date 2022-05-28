@@ -70,6 +70,15 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 	return wra[0], err
 }
 
+func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
+	if conn.hasBeenClosed {
+		return 0, errClosed
+	}
+	sqlStatements := make([]string, 0)
+	sqlStatements = append(sqlStatements, sqlStatement)
+	return conn.Queue(sqlStatements)
+}
+
 /*
 Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
 
@@ -169,6 +178,36 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 	} else {
 		return results, nil
 	}
+}
+
+func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
+	if conn.hasBeenClosed {
+		return 0, errClosed
+	}
+
+	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
+
+	// Set queuing mode just for this call.
+	conn.wantsQueueing = true
+	defer func() {
+		conn.wantsQueueing = false
+	}()
+
+	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements)
+	if err != nil {
+		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
+		return 0, err
+	}
+	trace("%s: rqliteApiCall() OK", conn.ID)
+
+	var sections map[string]interface{}
+	err = json.Unmarshal(response, &sections)
+	if err != nil {
+		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
+		return 0, err
+	}
+
+	return int64(sections["sequence_number"].(float64)), nil
 }
 
 /* *****************************************************************

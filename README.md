@@ -137,6 +137,17 @@ gorqlite.TraceOn(os.Stderr)
 // turn off
 gorqlite.TraceOff()
 ```
+
+### Queued Writes
+The client does support Queued Writes. Instead of calling the `Write()` functions, call the queueing versions instead.
+```go
+var seq int64
+var err error
+
+seq, err = conn.QueueOne("CREATE TABLE " + testTableName() + " (id integer, name text)")
+seq, err = conn.Queue(...)
+```
+
 ## Important Notes
 
 If you use access control, any user connecting will need the "status" permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the master is lost.
