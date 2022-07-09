@@ -76,23 +76,14 @@ type Connection struct {
 	client http.Client
 }
 
-/* *****************************************************************
-
-   method: Connection.Close()
-
- * *****************************************************************/
-
+// Close will mark the connection as closed. It is safe to be called
+// multiple times.
 func (conn *Connection) Close() {
 	conn.hasBeenClosed = true
 	trace("%s: %s", conn.ID, "closing connection")
 }
 
-/* *****************************************************************
-
-   method: Connection.ConsistencyLevel()
-
- * *****************************************************************/
-
+// ConsistencyLevel tells the current consistency level
 func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.hasBeenClosed {
 		return "", ErrClosed
@@ -100,12 +91,7 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 	return consistencyLevelNames[conn.consistencyLevel], nil
 }
 
-/* *****************************************************************
-
-   method: Connection.Leader()
-
- * *****************************************************************/
-
+// Leader tells the current leader of the cluster
 func (conn *Connection) Leader() (string, error) {
 	if conn.hasBeenClosed {
 		return "", ErrClosed
@@ -121,12 +107,7 @@ func (conn *Connection) Leader() (string, error) {
 	return string(conn.cluster.leader), nil
 }
 
-/* *****************************************************************
-
-   method: Connection.Peers()
-
- * *****************************************************************/
-
+// Peers teels the current peers of the cluster
 func (conn *Connection) Peers() ([]string, error) {
 	if conn.hasBeenClosed {
 		var ans []string
@@ -151,22 +132,17 @@ func (conn *Connection) Peers() ([]string, error) {
 	return plist, nil
 }
 
-/* *****************************************************************
-
-   method: Connection.SetConsistencyLevel()
-
- * *****************************************************************/
-
-func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
+func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error {
 	if conn.hasBeenClosed {
 		return ErrClosed
 	}
-	_, ok := consistencyLevels[levelDesired]
-	if ok {
-		conn.consistencyLevel = consistencyLevels[levelDesired]
-		return nil
+
+	if levelDesired < ConsistencyLevelNone || levelDesired > ConsistencyLevelStrong {
+		return fmt.Errorf("unknown consistency level: %d", levelDesired)
 	}
-	return errors.New(fmt.Sprintf("unknown consistency level: %s", levelDesired))
+
+	conn.consistencyLevel = levelDesired
+	return nil
 }
 
 func (conn *Connection) SetExecutionWithTransaction(state bool) error {
@@ -176,12 +152,6 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 	conn.wantsTransactions = state
 	return nil
 }
-
-/* *****************************************************************
-
-   method: Connection.initConnection()
-
- * *****************************************************************/
 
 // initConnection takes the initial connection URL specified by
 // the user, and parses it into a peer.  This peer is assumed to
@@ -266,7 +236,7 @@ func (conn *Connection) initConnection(url string) error {
 	// the desired consistency level
 
 	// default
-	conn.consistencyLevel = cl_WEAK
+	conn.consistencyLevel = ConsistencyLevelWeak
 
 	// parse query params
 	query := u.Query()

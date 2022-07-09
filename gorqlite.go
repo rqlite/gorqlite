@@ -10,12 +10,10 @@
 // Learn more about rqlite at: https://github.com/rqlite/rqlite
 package gorqlite
 
-/*
-	this file contains package-level stuff:
-		consts
-		init()
-		Open, TraceOn(), TraceOff()
-*/
+// this file contains package-level stuff:
+//   consts
+//   init()
+//   Open, TraceOn(), TraceOff()
 
 import (
 	"crypto/rand"
@@ -25,18 +23,12 @@ import (
 	"strings"
 )
 
-/* *****************************************************************
-
-   const
-
- * *****************************************************************/
-
 type consistencyLevel int
 
 const (
-	cl_NONE consistencyLevel = iota
-	cl_WEAK
-	cl_STRONG
+	ConsistencyLevelNone consistencyLevel = iota
+	ConsistencyLevelWeak
+	ConsistencyLevelStrong
 )
 
 // used in several places, actually
@@ -54,24 +46,18 @@ const (
 	api_NODES
 )
 
-/* *****************************************************************
-
-   init()
-
- * *****************************************************************/
-
 func init() {
 	traceOut = ioutil.Discard
 
 	consistencyLevelNames = make(map[consistencyLevel]string)
-	consistencyLevelNames[cl_NONE] = "none"
-	consistencyLevelNames[cl_WEAK] = "weak"
-	consistencyLevelNames[cl_STRONG] = "strong"
+	consistencyLevelNames[ConsistencyLevelNone] = "none"
+	consistencyLevelNames[ConsistencyLevelWeak] = "weak"
+	consistencyLevelNames[ConsistencyLevelStrong] = "strong"
 
 	consistencyLevels = make(map[string]consistencyLevel)
-	consistencyLevels["none"] = cl_NONE
-	consistencyLevels["weak"] = cl_WEAK
-	consistencyLevels["strong"] = cl_STRONG
+	consistencyLevels["none"] = ConsistencyLevelNone
+	consistencyLevels["weak"] = ConsistencyLevelWeak
+	consistencyLevels["strong"] = ConsistencyLevelStrong
 }
 
 // Open() creates and returns a "connection" to rqlite.
