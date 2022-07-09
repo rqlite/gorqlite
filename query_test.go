@@ -1,20 +1,22 @@
-package gorqlite
+package gorqlite_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/rqlite/gorqlite"
 )
 
 func TestQueryOne(t *testing.T) {
-	var wr WriteResult
-	var qr QueryResult
-	var wResults []WriteResult
-	var qResults []QueryResult
+	var wr gorqlite.WriteResult
+	var qr gorqlite.QueryResult
+	var wResults []gorqlite.WriteResult
+	var qResults []gorqlite.QueryResult
 	var err error
 
 	t.Logf("trying Open")
-	conn, err := Open(testUrl())
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Logf("--> FATAL")
 		t.Fatal()

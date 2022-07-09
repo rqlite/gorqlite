@@ -1,15 +1,19 @@
-package gorqlite
+package gorqlite_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rqlite/gorqlite"
+)
 
 // import "os"
 
 func TestWriteOne(t *testing.T) {
-	var wr WriteResult
+	var wr gorqlite.WriteResult
 	var err error
 
 	t.Logf("trying Open")
-	conn, err := Open(testUrl())
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Logf("--> FATAL")
 		t.Fatal(err)
@@ -62,7 +66,7 @@ func TestWriteOneQueued(t *testing.T) {
 	var err error
 
 	t.Logf("trying Open")
-	conn, err := Open(testUrl())
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Logf("--> FATAL")
 		t.Fatal(err)
@@ -104,12 +108,12 @@ func TestWriteOneQueued(t *testing.T) {
 }
 
 func TestWrite(t *testing.T) {
-	var results []WriteResult
+	var results []gorqlite.WriteResult
 	var err error
 	var s []string
 
 	t.Logf("trying Open")
-	conn, err := Open(testUrl())
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Logf("--> FATAL")
 		t.Fatal(err)

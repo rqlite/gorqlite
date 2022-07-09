@@ -1,4 +1,4 @@
-package gorqlite
+package gorqlite_test
 
 import "os"
 

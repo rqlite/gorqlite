@@ -1,14 +1,15 @@
-package gorqlite
+package gorqlite_test
 
 import (
-	"os"
 	"testing"
+
+	"github.com/rqlite/gorqlite"
 )
 
 func TestInitCluster(t *testing.T) {
-	TraceOn(os.Stderr)
+	// gorqlite.TraceOn(os.Stderr)
 	t.Logf("trying Open: %s\n", testUrl())
-	conn, err := Open(testUrl())
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Logf("--> FAILED")
 		t.Fatal(err)
