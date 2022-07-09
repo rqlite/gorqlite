@@ -12,6 +12,7 @@ package gorqlite
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ import (
 //
 // 	- handles retries
 // 	- handles timeouts
-func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
+func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
 	// Verify that we have at least a single peer to which we can make the request
 	peers := conn.cluster.PeerList()
 	if len(peers) < 1 {
@@ -41,7 +42,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		url := conn.assembleURL(apiOp, peer)
 
 		// Prepare request
-		req, err := http.NewRequest(method, url, bytes.NewBuffer(requestBody))
+		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(requestBody))
 		if err != nil {
 			trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
@@ -97,7 +98,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 // 	- lowest level interface - does not do any JSON unmarshaling
 // 	- handles retries
 // 	- handles timeouts
-func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
+func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([]byte, error) {
 	var responseBody []byte
 	trace("%s: rqliteApiGet() called", conn.ID)
 
@@ -106,7 +107,7 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 		return responseBody, errors.New("rqliteApiGet() called for invalid api operation")
 	}
 
-	return conn.rqliteApiCall(apiOp, "GET", nil)
+	return conn.rqliteApiCall(ctx, apiOp, "GET", nil)
 }
 
 //    method: rqliteApiPost() - for api_QUERY and api_WRITE
@@ -114,7 +115,7 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 // 	- lowest level interface - does not do any JSON unmarshaling
 // 	- handles retries
 // 	- handles timeouts
-func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string, parameters [][]interface{}) ([]byte, error) {
+func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []string, parameters [][]interface{}) ([]byte, error) {
 	var responseBody []byte
 
 	// Allow only api_QUERY and api_WRITE
@@ -130,7 +131,7 @@ func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string
 		if err != nil {
 			return nil, err
 		}
-		return conn.rqliteApiCall(apiOp, "POST", body)
+		return conn.rqliteApiCall(ctx, apiOp, "POST", body)
 	}
 
 	var bulkParameterizedBuilder [][]interface{}
@@ -147,5 +148,5 @@ func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string
 		return nil, err
 	}
 
-	return conn.rqliteApiCall(apiOp, "POST", body)
+	return conn.rqliteApiCall(ctx, apiOp, "POST", body)
 }

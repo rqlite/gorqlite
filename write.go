@@ -7,6 +7,7 @@ package gorqlite
 */
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,18 @@ func (conn *Connection) WriteOne(sqlStatement string, args ...interface{}) (wr W
 	return wra[0], err
 }
 
+// WriteOneContext() is a convenience method that wraps WriteContext() into a single-statement
+func (conn *Connection) WriteOneContext(ctx context.Context, sqlStatement string, args ...interface{}) (wr WriteResult, err error) {
+	if conn.hasBeenClosed {
+		wr.Err = ErrClosed
+		return wr, ErrClosed
+	}
+
+	wra, err := conn.WriteContext(ctx, []string{sqlStatement}, args)
+	return wra[0], err
+}
+
+// QueueOne() is a convenience method that wraps Queue() into a single-statement
 func (conn *Connection) QueueOne(sqlStatement string, args ...interface{}) (seq int64, err error) {
 	if conn.hasBeenClosed {
 		return 0, ErrClosed
@@ -74,14 +87,33 @@ func (conn *Connection) QueueOne(sqlStatement string, args ...interface{}) (seq 
 	return conn.Queue([]string{sqlStatement}, args)
 }
 
-// Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
+// QueueOneContext() is a convenience method that wraps QueueContext() into a single-statement
+func (conn *Connection) QueueOneContext(ctx context.Context, sqlStatement string, args ...interface{}) (seq int64, err error) {
+	if conn.hasBeenClosed {
+		return 0, ErrClosed
+	}
+
+	return conn.QueueContext(ctx, []string{sqlStatement}, args)
+}
+
+// Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc.
+// All go through Write().
 //
-// Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
+// Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults,
+// each corresponding to the SQL statement that produced it.
 //
 // All statements are executed as a single transaction.
 //
-// Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+// Write() returns an error if one is encountered during its operation.
+// If it's something like a call to the rqlite API, then it'll return that error.
+// If one statement out of several has an error, it will return a generic "there were %d statement errors"
+// and you'll have to look at the individual statement's Err for more info.
 func (conn *Connection) Write(sqlStatements []string, args ...[]interface{}) (results []WriteResult, err error) {
+	return conn.WriteContext(context.Background(), sqlStatements, args...)
+}
+
+// WriteContext() is the same as Write(), but it takes a context.Context.
+func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string, args ...[]interface{}) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
@@ -93,7 +125,7 @@ func (conn *Connection) Write(sqlStatements []string, args ...[]interface{}) (re
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements, args)
+	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult WriteResult
@@ -172,6 +204,10 @@ func (conn *Connection) Write(sqlStatements []string, args ...[]interface{}) (re
 }
 
 func (conn *Connection) Queue(sqlStatements []string, args ...[]interface{}) (seq int64, err error) {
+	return conn.QueueContext(context.Background(), sqlStatements, args...)
+}
+
+func (conn *Connection) QueueContext(ctx context.Context, sqlStatements []string, args ...[]interface{}) (seq int64, err error) {
 	if conn.hasBeenClosed {
 		return 0, ErrClosed
 	}
@@ -184,7 +220,7 @@ func (conn *Connection) Queue(sqlStatements []string, args ...[]interface{}) (se
 		conn.wantsQueueing = false
 	}()
 
-	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements, args)
+	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		return 0, err

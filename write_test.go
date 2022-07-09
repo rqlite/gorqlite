@@ -1,7 +1,9 @@
 package gorqlite_test
 
 import (
+	"context"
 	"testing"
+	"time"
 )
 
 // import "os"
@@ -109,6 +111,16 @@ func TestWriteOneQueued(t *testing.T) {
 			t.Errorf("seq must not be 0")
 		}
 	})
+}
+
+func TestQueueOneContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	seq, err := globalConnection.QueueOneContext(ctx, "INSERT INTO "+testTableName()+" (id, name) VALUES ( ?, ? )", 120, "aaa bbb ccc")
+	if err != nil {
+		t.Errorf("failed during insert: %v - %v", err.Error(), seq)
+	}
 }
 
 func TestWrite(t *testing.T) {

@@ -18,6 +18,7 @@ package gorqlite
  * *****************************************************************/
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -119,7 +120,7 @@ func (conn *Connection) updateClusterInfo() error {
 	var rc rqliteCluster
 	rc.conn = conn
 
-	responseBody, err := conn.rqliteApiGet(api_STATUS)
+	responseBody, err := conn.rqliteApiGet(context.Background(), api_STATUS)
 	if err != nil {
 		return err
 	}
@@ -160,7 +161,7 @@ func (conn *Connection) updateClusterInfo() error {
 	if rc.leader == "" {
 		// nodes/ API is available in 6.0+
 		trace("getting leader from metadata failed, trying nodes/")
-		responseBody, err := conn.rqliteApiGet(api_NODES)
+		responseBody, err := conn.rqliteApiGet(context.Background(), api_NODES)
 		if err != nil {
 			return errors.New("could not determine leader from API nodes call")
 		}

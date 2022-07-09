@@ -1,6 +1,7 @@
 package gorqlite
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,9 +98,18 @@ func (conn *Connection) QueryOne(sqlStatement string, args ...interface{}) (qr Q
 		qr.Err = ErrClosed
 		return qr, ErrClosed
 	}
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-	qra, err := conn.Query(sqlStatements)
+
+	qra, err := conn.Query([]string{sqlStatement}, args)
+	return qra[0], err
+}
+
+func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string, args ...interface{}) (qr QueryResult, err error) {
+	if conn.hasBeenClosed {
+		qr.Err = ErrClosed
+		return qr, ErrClosed
+	}
+
+	qra, err := conn.QueryContext(ctx, []string{sqlStatement}, args)
 	return qra[0], err
 }
 
@@ -107,6 +117,10 @@ func (conn *Connection) QueryOne(sqlStatement string, args ...interface{}) (qr Q
 //
 // It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
 func (conn *Connection) Query(sqlStatements []string, args ...[]interface{}) (results []QueryResult, err error) {
+	return conn.QueryContext(context.Background(), sqlStatements, args...)
+}
+
+func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string, args ...[]interface{}) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {
@@ -118,7 +132,7 @@ func (conn *Connection) Query(sqlStatements []string, args ...[]interface{}) (re
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
 	// if we get an error POSTing, that's a showstopper
-	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements, args)
+	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult QueryResult

@@ -1,6 +1,7 @@
 package gorqlite_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -37,9 +38,17 @@ func TestQueryOne(t *testing.T) {
 		t.Errorf("failed during query: %v", err.Error())
 	}
 
+	if qr.NumRows() != 2 {
+		t.Errorf("expected 2 row, got %v", qr.NumRows())
+	}
+
 	na := qr.Next()
 	if na != true {
 		t.Errorf("expected true, got %v", na)
+	}
+
+	if qr.RowNumber() != 0 {
+		t.Errorf("expected row number to be 0, got %v", qr.RowNumber())
 	}
 
 	t.Logf("trying Map()")
@@ -87,6 +96,11 @@ func TestQueryOne(t *testing.T) {
 	}
 
 	qr.Next()
+
+	if qr.RowNumber() != 1 {
+		t.Errorf("expected row number to be 1, got %v", qr.RowNumber())
+	}
+
 	err = qr.Scan(&name, &ts, &wallet, &bankrupt, &payload)
 	if err != nil {
 		t.Errorf("scanning: %s", err.Error())
@@ -97,5 +111,72 @@ func TestQueryOne(t *testing.T) {
 
 	if ts != meeting {
 		t.Errorf("expected ts to equal meeting, got ts: %v, meeting: %v", ts, meeting)
+	}
+}
+
+func TestQueryOneContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	now := time.Now()
+
+	wResults, err := globalConnection.WriteOneContext(
+		ctx,
+		"INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( ?, ?, ?, ?, ?, ? )",
+		11,
+		"Vulcan",
+		889.3332,
+		false,
+		[]byte("Lorem ipsum dolor sit amet"),
+		now,
+	)
+	if err != nil {
+		t.Errorf("failed during insert: %v - %v", err.Error(), wResults.Err.Error())
+	}
+
+	t.Logf("trying QueryOne")
+	qr, err := globalConnection.QueryOneContext(ctx, "SELECT id, name, wallet, bankrupt, payload, ts FROM "+testTableName()+"_full WHERE id = ?", 11)
+	if err != nil {
+		t.Errorf("failed during query: %v - %v", err.Error(), qr.Err.Error())
+	}
+
+	na := qr.Next()
+	if na != true {
+		t.Errorf("expected true, got %v", na)
+	}
+
+	var id int64
+	var name string
+	var ts time.Time
+	var wallet float64
+	var bankrupt bool
+	var payload []byte
+	err = qr.Scan(&id, &name, &wallet, &bankrupt, &payload, &ts)
+	if err != nil {
+		t.Errorf("scanning: %v", err.Error())
+	}
+
+	if id != 11 {
+		t.Errorf("expected id to be 11, got %v", id)
+	}
+
+	if name != "Vulcan" {
+		t.Errorf("expected name to be 'Vulcan', got: %s", name)
+	}
+
+	if wallet != 889.3332 {
+		t.Errorf("expected wallet to be 889.3332, got: %v", wallet)
+	}
+
+	if bankrupt != false {
+		t.Errorf("expected bankrupt to be false, got: %v", bankrupt)
+	}
+
+	if len(payload) == 0 {
+		t.Errorf("expected payload to be non-empty, got: %v", payload)
+	}
+
+	if !ts.Equal(now) {
+		t.Errorf("expected ts to equal now, got ts: %v, now: %v", ts, now)
 	}
 }
