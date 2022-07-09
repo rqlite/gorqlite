@@ -134,6 +134,8 @@ func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, s
 		return conn.rqliteApiCall(ctx, apiOp, "POST", body)
 	}
 
+	// If the parameters exists, whether is a single query or a batch,
+	// we should use the bulk API.
 	var bulkParameterizedBuilder [][]interface{}
 	for _, stmt := range sqlStatements {
 		bulkParameterizedBuilder = append(bulkParameterizedBuilder, []interface{}{stmt})

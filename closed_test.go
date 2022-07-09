@@ -9,7 +9,7 @@ import (
 )
 
 func TestClosedConnection(t *testing.T) {
-	conn, err := gorqlite.Open("http://")
+	conn, err := gorqlite.Open(testUrl())
 	if err != nil {
 		t.Errorf("failed to open connection: %v", err.Error())
 	}
