@@ -1,15 +1,13 @@
-/*
-	gorqlite
-	A golang database/sql driver for rqlite, the distributed consistent sqlite.
-
-	Copyright (c)2016 andrew fabbro (andrew@fabbro.org)
-
-	See LICENSE.md for license. tl;dr: MIT. Conveniently, the same licese as rqlite.
-
-	Project home page: https://github.com/raindo308/gorqlite
-
-	Learn more about rqlite at: https://github.com/rqlite/rqlite
-*/
+// gorqlite
+// A golang database/sql driver for rqlite, the distributed consistent sqlite.
+//
+// Copyright (c)2016 andrew fabbro (andrew@fabbro.org)
+//
+// See LICENSE.md for license. tl;dr: MIT. Conveniently, the same licese as rqlite.
+//
+// Project home page: https://github.com/raindo308/gorqlite
+//
+// Learn more about rqlite at: https://github.com/rqlite/rqlite
 package gorqlite
 
 /*
@@ -76,26 +74,24 @@ func init() {
 	consistencyLevels["strong"] = cl_STRONG
 }
 
-/* *****************************************************************
-Open() creates and returns a "connection" to rqlite.
-
-Since rqlite is stateless, there is no actual connection.  Open() creates and initializes a gorqlite Connection type, which represents various config information.
-
-The URL should be in a form like this:
-
-	http://localhost:4001
-
-	http://     default, no auth, localhost:4001
-	https://    default, no auth, localhost:4001, using https
-
-	http://localhost:1234
-	http://mary:secret2@localhost:1234
-
-  https://mary:secret2@somewhere.example.com:1234
-  https://mary:secret2@somewhere.example.com // will use 4001
- * *****************************************************************/
-func Open(connURL string) (Connection, error) {
-	var conn Connection
+// Open() creates and returns a "connection" to rqlite.
+//
+// Since rqlite is stateless, there is no actual connection.  Open() creates and initializes a gorqlite Connection type, which represents various config information.
+//
+// The URL should be in a form like this:
+//
+//      http://localhost:4001
+//
+//      http://     default, no auth, localhost:4001
+//      https://    default, no auth, localhost:4001, using https
+//
+//      http://localhost:1234
+//      http://mary:secret2@localhost:1234
+//
+//      https://mary:secret2@somewhere.example.com:1234
+//      https://mary:secret2@somewhere.example.com // will use 4001
+func Open(connURL string) (*Connection, error) {
+	var conn = &Connection{}
 
 	// generate our uuid for trace
 	b := make([]byte, 16)
@@ -124,30 +120,25 @@ func Open(connURL string) (Connection, error) {
 	return conn, err
 }
 
-/* *****************************************************************
-
-	func: trace()
-
-	adds a message to the trace output
-
-	not a public function.  we (inside) can add - outside they can
-	only see.
-
-	Call trace as:     Sprintf pattern , args...
-
-	This is done so that the more expensive Sprintf() stuff is
-	done only if truly needed.  When tracing is off, calls to
-	trace() just hit a bool check and return.  If tracing is on,
-	then the Sprintfing is done at a leisurely pace because, well,
-	we're tracing.
-
-	Premature optimization is the root of all evil, so this is
-	probably sinful behavior.
-
-	Don't put a \n in your Sprintf pattern becuase trace() adds one
-
- * *****************************************************************/
-
+// func: trace()
+//
+// adds a message to the trace output
+//
+// not a public function.  we (inside) can add - outside they can
+// only see.
+//
+// Call trace as:     Sprintf pattern , args...
+//
+// This is done so that the more expensive Sprintf() stuff is
+// done only if truly needed.  When tracing is off, calls to
+// trace() just hit a bool check and return.  If tracing is on,
+// then the Sprintfing is done at a leisurely pace because, well,
+// we're tracing.
+//
+// Premature optimization is the root of all evil, so this is
+// probably sinful behavior.
+//
+// Don't put a \n in your Sprintf pattern becuase trace() adds one
 func trace(pattern string, args ...interface{}) {
 	// don't do the probably expensive Sprintf() if not needed
 	if wantsTrace == false {
@@ -164,27 +155,19 @@ func trace(pattern string, args ...interface{}) {
 	traceOut.Write([]byte(msg))
 }
 
-/*
-	TraceOn()
-
-	Turns on tracing output to the io.Writer of your choice.
-
-	Trace output is very detailed and verbose, as you might expect.
-
-	Normally, you should run with tracing off, as it makes absolutely
-	no concession to performance and is intended for debugging/dev use.
-*/
+// Turns on tracing output to the io.Writer of your choice.
+//
+// Trace output is very detailed and verbose, as you might expect.
+//
+// Normally, you should run with tracing off, as it makes absolutely
+// no concession to performance and is intended for debugging/dev use.
 func TraceOn(w io.Writer) {
 	traceOut = w
 	wantsTrace = true
 }
 
-/*
-	TraceOff()
-
-	Turns off tracing output.  Once you call TraceOff(), no further
-	info is sent to the io.Writer, unless it is TraceOn'd again.
-*/
+// Turns off tracing output.  Once you call TraceOff(), no further
+// info is sent to the io.Writer, unless it is TraceOn'd again.
 func TraceOff() {
 	wantsTrace = false
 	traceOut = ioutil.Discard

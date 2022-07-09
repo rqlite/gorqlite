@@ -25,7 +25,7 @@ import (
 const defaultTimeout = 10
 
 var (
-	errClosed = errors.New("gorqlite: connection is closed")
+	ErrClosed = errors.New("gorqlite: connection is closed")
 	traceOut  io.Writer
 )
 
@@ -98,7 +98,7 @@ func (conn *Connection) Close() {
 
 func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.hasBeenClosed {
-		return "", errClosed
+		return "", ErrClosed
 	}
 	return consistencyLevelNames[conn.consistencyLevel], nil
 }
@@ -111,7 +111,7 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 
 func (conn *Connection) Leader() (string, error) {
 	if conn.hasBeenClosed {
-		return "", errClosed
+		return "", ErrClosed
 	}
 	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
@@ -133,7 +133,7 @@ func (conn *Connection) Leader() (string, error) {
 func (conn *Connection) Peers() ([]string, error) {
 	if conn.hasBeenClosed {
 		var ans []string
-		return ans, errClosed
+		return ans, ErrClosed
 	}
 	plist := make([]string, 0)
 
@@ -162,7 +162,7 @@ func (conn *Connection) Peers() ([]string, error) {
 
 func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 	if conn.hasBeenClosed {
-		return errClosed
+		return ErrClosed
 	}
 	_, ok := consistencyLevels[levelDesired]
 	if ok {
@@ -174,7 +174,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 
 func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 	if conn.hasBeenClosed {
-		return errClosed
+		return ErrClosed
 	}
 	conn.wantsTransactions = state
 	return nil

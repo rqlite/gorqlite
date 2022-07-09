@@ -54,15 +54,12 @@ import (
 
  * *****************************************************************/
 
-/*
-WriteOne() is a convenience method that wraps Write() into a single-statement
-method.
-*/
-
+// WriteOne() is a convenience method that wraps Write() into a single-statement
+// method.
 func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
 	if conn.hasBeenClosed {
-		wr.Err = errClosed
-		return wr, errClosed
+		wr.Err = ErrClosed
+		return wr, ErrClosed
 	}
 	sqlStatements := make([]string, 0)
 	sqlStatements = append(sqlStatements, sqlStatement)
@@ -72,30 +69,28 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 
 func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
 	if conn.hasBeenClosed {
-		return 0, errClosed
+		return 0, ErrClosed
 	}
 	sqlStatements := make([]string, 0)
 	sqlStatements = append(sqlStatements, sqlStatement)
 	return conn.Queue(sqlStatements)
 }
 
-/*
-Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
-
-Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
-
-All statements are executed as a single transaction.
-
-Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
-*/
+// Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
+//
+// Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
+//
+// All statements are executed as a single transaction.
+//
+// Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
 func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
 		var errResult WriteResult
-		errResult.Err = errClosed
+		errResult.Err = ErrClosed
 		results = append(results, errResult)
-		return results, errClosed
+		return results, ErrClosed
 	}
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
@@ -120,10 +115,8 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 		return results, err
 	}
 
-	/*
-		at this point, we have a "results" section and
-		a "time" section.  we can igore the latter.
-	*/
+	// at this point, we have a "results" section and
+	// a "time" section.  we can igore the latter.
 
 	resultsArray, ok := sections["results"].([]interface{})
 	if !ok {
@@ -182,7 +175,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 
 func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 	if conn.hasBeenClosed {
-		return 0, errClosed
+		return 0, ErrClosed
 	}
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
@@ -216,11 +209,9 @@ func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 
  * *****************************************************************/
 
-/*
-A WriteResult holds the result of a single statement sent to Write().
-
-Write() returns an array of WriteResult vars, while WriteOne() returns a single WriteResult.
-*/
+// A WriteResult holds the result of a single statement sent to Write().
+//
+// Write() returns an array of WriteResult vars, while WriteOne() returns a single WriteResult.
 type WriteResult struct {
 	Err          error // don't trust the rest if this isn't nil
 	Timing       float64

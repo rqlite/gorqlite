@@ -90,14 +90,12 @@ import (
 
  * *****************************************************************/
 
-/*
-QueryOne() is a convenience method that wraps Query() into a single-statement
-method.
-*/
+// QueryOne() is a convenience method that wraps Query() into a single-statement
+// method.
 func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
 	if conn.hasBeenClosed {
-		qr.Err = errClosed
-		return qr, errClosed
+		qr.Err = ErrClosed
+		return qr, ErrClosed
 	}
 	sqlStatements := make([]string, 0)
 	sqlStatements = append(sqlStatements, sqlStatement)
@@ -105,19 +103,17 @@ func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error
 	return qra[0], err
 }
 
-/*
-Query() is used to perform SELECT operations in the database.
-
-It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
-*/
+// Query() is used to perform SELECT operations in the database.
+//
+// It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
 func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {
 		var errResult QueryResult
-		errResult.Err = errClosed
+		errResult.Err = ErrClosed
 		results = append(results, errResult)
-		return results, errClosed
+		return results, ErrClosed
 	}
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
@@ -143,10 +139,8 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 		return results, err
 	}
 
-	/*
-		at this point, we have a "results" section and
-		a "time" section.  we can ignore the latter.
-	*/
+	// at this point, we have a "results" section and
+	// a "time" section.  we can ignore the latter.
 
 	resultsArray := sections["results"].([]interface{})
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
@@ -212,17 +206,15 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 
  * *****************************************************************/
 
-/*
-A QueryResult type holds the results of a call to Query().  You could think of it as a rowset.
-
-So if you were to query:
-
-  SELECT id, name FROM some_table;
-
-then a QueryResult would hold any errors from that query, a list of columns and types, and the actual row values.
-
-Query() returns an array of QueryResult vars, while QueryOne() returns a single variable.
-*/
+// A QueryResult type holds the results of a call to Query().  You could think of it as a rowset.
+//
+// So if you were to query:
+//
+//   SELECT id, name FROM some_table;
+//
+// then a QueryResult would hold any errors from that query, a list of columns and types, and the actual row values.
+//
+// Query() returns an array of QueryResult vars, while QueryOne() returns a single variable.
 type QueryResult struct {
 	conn      *Connection
 	Err       error
@@ -243,9 +235,7 @@ type QueryResult struct {
 
  * *****************************************************************/
 
-/*
-Columns returns a list of the column names for this QueryResult.
-*/
+// Columns returns a list of the column names for this QueryResult.
 func (qr *QueryResult) Columns() []string {
 	return qr.columns
 }
@@ -256,14 +246,12 @@ func (qr *QueryResult) Columns() []string {
 
  * *****************************************************************/
 
-/*
-Map() returns the current row (as advanced by Next()) as a map[string]interface{}
-
-The key is a string corresponding to a column name.
-The value is the corresponding column.
-
-Note that only json values are supported, so you will need to type the interface{} accordingly.
-*/
+// Map() returns the current row (as advanced by Next()) as a map[string]interface{}
+//
+// The key is a string corresponding to a column name.
+// The value is the corresponding column.
+//
+// Note that only json values are supported, so you will need to type the interface{} accordingly.
 func (qr *QueryResult) Map() (map[string]interface{}, error) {
 	trace("%s: Map() called for row %d", qr.conn.ID, qr.rowNumber)
 	ans := make(map[string]interface{})
@@ -299,19 +287,17 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 
  * *****************************************************************/
 
-/*
-Next() positions the QueryResult result pointer so that Scan() or Map() is ready.
-
-You should call Next() first, but gorqlite will fix it if you call Map() or Scan() before
-the initial Next().
-
-A common idiom:
-
-	rows := conn.Write(something)
-	for rows.Next() {
-		// your Scan/Map and processing here.
-	}
-*/
+// Next() positions the QueryResult result pointer so that Scan() or Map() is ready.
+//
+// You should call Next() first, but gorqlite will fix it if you call Map() or Scan() before
+// the initial Next().
+//
+// A common idiom:
+//
+//      rows := conn.Write(something)
+//      for rows.Next() {
+//          // your Scan/Map and processing here.
+//      }
 func (qr *QueryResult) Next() bool {
 	if qr.rowNumber >= int64(len(qr.values)-1) {
 		return false
@@ -327,9 +313,7 @@ func (qr *QueryResult) Next() bool {
 
  * *****************************************************************/
 
-/*
-NumRows() returns the number of rows returned by the query.
-*/
+// NumRows() returns the number of rows returned by the query.
 func (qr *QueryResult) NumRows() int64 {
 	return int64(len(qr.values))
 }
@@ -340,9 +324,7 @@ func (qr *QueryResult) NumRows() int64 {
 
  * *****************************************************************/
 
-/*
-RowNumber() returns the current row number as Next() iterates through the result's rows.
-*/
+// RowNumber() returns the current row number as Next() iterates through the result's rows.
 func (qr *QueryResult) RowNumber() int64 {
 	return qr.rowNumber
 }
@@ -369,19 +351,17 @@ func toTime(src interface{}) (time.Time, error) {
 
  * *****************************************************************/
 
-/*
-Scan() takes a list of pointers and then updates them to reflect he current row's data.
-
-Note that only the following data types are used, and they
-are a subset of the types JSON uses:
-	string, for JSON strings
-	float64, for JSON numbers
-	int64, as a convenient extension
-	nil for JSON null
-
-booleans, JSON arrays, and JSON objects are not supported,
-since sqlite does not support them.
-*/
+// Scan() takes a list of pointers and then updates them to reflect he current row's data.
+//
+// Note that only the following data types are used, and they
+// are a subset of the types JSON uses:
+// 	string, for JSON strings
+// 	float64, for JSON numbers
+// 	int64, as a convenient extension
+// 	nil for JSON null
+//
+// booleans, JSON arrays, and JSON objects are not supported,
+// since sqlite does not support them.
 func (qr *QueryResult) Scan(dest ...interface{}) error {
 	trace("%s: Scan() called for %d vars", qr.conn.ID, len(dest))
 
@@ -463,13 +443,11 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 
  * *****************************************************************/
 
-/*
-Types() returns an array of the column's types.
-
-Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  So you can initialize a column as CHAR(3) but it's really TEXT.  See https://www.sqlite.org/datatype3.html
-
-This info may additionally conflict with the reality that your data is being JSON encoded/decoded.
-*/
+// Types() returns an array of the column's types.
+//
+// Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  So you can initialize a column as CHAR(3) but it's really TEXT.  See https://www.sqlite.org/datatype3.html
+//
+// This info may additionally conflict with the reality that your data is being JSON encoded/decoded.
 func (qr *QueryResult) Types() []string {
 	return qr.types
 }
