@@ -24,25 +24,11 @@ import (
 	"strings"
 )
 
-/* *****************************************************************
-
-	type: peer
-
-	this is an internal type to abstract peer info, actually just
-	represent a single hostname:port
-
- * *****************************************************************/
-
+// this is an internal type to abstract peer info, actually just
+// represent a single hostname:port
 type peer string
 
-/* *****************************************************************
-
-  type: rqliteCluster
-
-	internal type that abstracts the full cluster state (leader, peers)
-
- * *****************************************************************/
-
+// internal type that abstracts the full cluster state (leader, peers)
 type rqliteCluster struct {
 	leader     peer
 	otherPeers []peer
@@ -51,37 +37,23 @@ type rqliteCluster struct {
 	conn     *Connection
 }
 
-/* *****************************************************************
-
-  method: rqliteCluster.PeerList()
-
-	in the api calls, we'll want to try the leader first, then the other
-	peers.  to make looping easy, this function returns a list of peers
-	in the order the try them: leader, other peer, other peer, etc.
-	since the peer list might change only during updateClusterInfo(),
-	we keep it cached
-
- * *****************************************************************/
-
+// In the api calls, we'll want to try the leader first, then the other
+// peers. To make looping easy, this function returns a list of peers
+// in the order the try them: leader, other peer, other peer, etc.
+// Since the peer list might change only during updateClusterInfo(),
+// we keep it cached
 func (rc *rqliteCluster) PeerList() []peer {
 	return rc.peerList
 }
 
-/* *****************************************************************
+// tell it what peer to talk to and what kind of API operation you're
+// making, and it will return the full URL, from start to finish.
+// e.g.:
 
-	method: Connection.assembleURL()
+// https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
 
-	tell it what peer to talk to and what kind of API operation you're
-	making, and it will return the full URL, from start to finish.
-	e.g.:
-
-	https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
-
-	note: this func needs to live at the Connection level because the
-	Connection holds the username, password, consistencyLevel, etc.
-
- * *****************************************************************/
-
+// note: this func needs to live at the Connection level because the
+// Connection holds the username, password, consistencyLevel, etc.
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	var builder strings.Builder
 
@@ -135,18 +107,11 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	return builder.String()
 }
 
-/* *****************************************************************
-
-	method: Connection.updateClusterInfo()
-
-	upon invocation, updateClusterInfo() completely erases and refreshes
-	the Connection's cluster info, replacing its rqliteCluster object
-	with current info.
-
-	the web heavy lifting (retrying, etc.) is done in rqliteApiGet()
-
- * *****************************************************************/
-
+// Upon invocation, updateClusterInfo() completely erases and refreshes
+// the Connection's cluster info, replacing its rqliteCluster object
+// with current info.
+//
+// The web heavy lifting (retrying, etc.) is done in rqliteApiGet()
 func (conn *Connection) updateClusterInfo() error {
 	trace("%s: updateClusterInfo() called", conn.ID)
 

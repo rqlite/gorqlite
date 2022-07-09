@@ -41,22 +41,19 @@ var wantsTrace bool
 
  * *****************************************************************/
 
-/*
-	The connection abstraction.	 Note that since rqlite is stateless,
-	there really is no "connection".  However, this type holds
-	information such as the current leader, peers, connection
-	string to build URLs, etc.
-
-	Connections are assigned a "connection ID" which is a pseudo-UUID
-	for connection identification in trace output only.  This helps
-	sort out what's going on if you have multiple connections going
-	at once.  It's generated using a non-standards-or-anything-else-compliant
-	function that uses crypto/rand to generate 16 random bytes.
-
-	Note that the Connection objection holds info on all peers, gathered
-	at time of Open() from the node specified.
-*/
-
+// The connection abstraction.	 Note that since rqlite is stateless,
+// there really is no "connection".  However, this type holds
+// information such as the current leader, peers, connection
+// string to build URLs, etc.
+//
+// Connections are assigned a "connection ID" which is a pseudo-UUID
+// for connection identification in trace output only.  This helps
+// sort out what's going on if you have multiple connections going
+// at once.  It's generated using a non-standards-or-anything-else-compliant
+// function that uses crypto/rand to generate 16 random bytes.
+//
+// Note that the Connection objection holds info on all peers, gathered
+// at time of Open() from the node specified.
 type Connection struct {
 	cluster rqliteCluster
 
@@ -186,41 +183,39 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 
  * *****************************************************************/
 
-/*
-	initConnection takes the initial connection URL specified by
-	the user, and parses it into a peer.  This peer is assumed to
-	be the leader.  The next thing Open() does is updateClusterInfo()
-	so the truth will be revealed soon enough.
-
-	initConnection() does not talk to rqlite.  It only parses the
-	connection URL and prepares the new connection for work.
-
-	URL format:
-
-		http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
-
-	Examples:
-
-		https://mary:secret2@localhost:4001/db
-		https://mary:secret2@server1.example.com:4001/db?level=none
-		https://mary:secret2@server2.example.com:4001/db?level=weak
-		https://mary:secret2@localhost:2265/db?level=strong
-
-	to use default connection to localhost:4001 with no auth:
-		http://
-		https://
-
-	guaranteed map fields - will be set to "" if not specified
-
-		field name                  default if not specified
-
-		username                    ""
-		password                    ""
-		hostname                    "localhost"
-		port                        "4001"
-		consistencyLevel            "weak"
-*/
-
+// initConnection takes the initial connection URL specified by
+// the user, and parses it into a peer.  This peer is assumed to
+// be the leader.  The next thing Open() does is updateClusterInfo()
+// so the truth will be revealed soon enough.
+//
+// initConnection() does not talk to rqlite.  It only parses the
+// connection URL and prepares the new connection for work.
+//
+// URL format:
+//
+// 	http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
+//
+// Examples:
+//
+// 	https://mary:secret2@localhost:4001/db
+// 	https://mary:secret2@server1.example.com:4001/db?level=none
+// 	https://mary:secret2@server2.example.com:4001/db?level=weak
+// 	https://mary:secret2@localhost:2265/db?level=strong
+//
+// to use default connection to localhost:4001 with no auth:
+// 	http://
+// 	https://
+//
+// guaranteed map fields - will be set to "" if not specified
+//
+// 	field name                  default if not specified
+//
+// 	username                    ""
+// 	password                    ""
+// 	hostname                    "localhost"
+// 	port                        "4001"
+// 	consistencyLevel            "weak"
+//
 func (conn *Connection) initConnection(url string) error {
 	// do some sanity checks.  You know users.
 
@@ -267,12 +262,8 @@ func (conn *Connection) initConnection(url string) error {
 	}
 	conn.cluster.peerList = []peer{conn.cluster.leader}
 
-	/*
-
-		at the moment, the only allowed query is "level=" with
-		the desired consistency level
-
-	*/
+	// at the moment, the only allowed query is "level=" with
+	// the desired consistency level
 
 	// default
 	conn.consistencyLevel = cl_WEAK

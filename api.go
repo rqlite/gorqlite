@@ -1,17 +1,14 @@
 package gorqlite
 
-/*
-	this file has low level stuff:
-
-	rqliteApiGet()
-	rqliteApiPost()
-
-	There is some code duplication between those and they should
-	probably be combined into one function.
-
-	nothing public here.
-
-*/
+// this file has low level stuff:
+//
+// rqliteApiGet()
+// rqliteApiPost()
+//
+// There is some code duplication between those and they should
+// probably be combined into one function.
+//
+// nothing public here.
 
 import (
 	"bytes"
@@ -23,14 +20,11 @@ import (
 	"strings"
 )
 
-/* *****************************************************************
-   method: rqliteApiCall() - internally handles api calls,
-	 													 not supposed to be used by other files
-
-	- handles retries
-	- handles timeouts
-
- * *****************************************************************/
+// method: rqliteApiCall() - internally handles api calls,
+// not supposed to be used by other files
+//
+// 	- handles retries
+// 	- handles timeouts
 func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
 	// Verify that we have at least a single peer to which we can make the request
 	peers := conn.cluster.PeerList()
@@ -98,16 +92,11 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 	return nil, errors.New(builder.String())
 }
 
-/* *****************************************************************
-
-   method: rqliteApiGet() - for api_STATUS and api_NODES
-
-	- lowest level interface - does not do any JSON unmarshaling
-	- handles retries
-	- handles timeouts
-
- * *****************************************************************/
-
+//    method: rqliteApiGet() - for api_STATUS and api_NODES
+//
+// 	- lowest level interface - does not do any JSON unmarshaling
+// 	- handles retries
+// 	- handles timeouts
 func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 	var responseBody []byte
 	trace("%s: rqliteApiGet() called", conn.ID)
@@ -120,16 +109,11 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 	return conn.rqliteApiCall(apiOp, "GET", nil)
 }
 
-/* *****************************************************************
-
-   method: rqliteApiPost() - for api_QUERY and api_WRITE
-
-	- lowest level interface - does not do any JSON unmarshaling
-	- handles retries
-	- handles timeouts
-
- * *****************************************************************/
-
+//    method: rqliteApiPost() - for api_QUERY and api_WRITE
+//
+// 	- lowest level interface - does not do any JSON unmarshaling
+// 	- handles retries
+// 	- handles timeouts
 func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string) ([]byte, error) {
 	var responseBody []byte
 

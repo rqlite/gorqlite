@@ -122,7 +122,7 @@ func TestWrite(t *testing.T) {
 	results, err = conn.Write(s)
 	if err != nil {
 		t.Logf("--> FAILED")
-		t.Fail()
+		t.Fatal(err)
 	}
 
 	t.Logf("trying Write INSERT")
@@ -134,11 +134,17 @@ func TestWrite(t *testing.T) {
 	results, err = conn.Write(s)
 	if err != nil {
 		t.Logf("--> FAILED")
-		t.Fail()
+		for _, result := range results {
+			if result.Err != nil {
+				t.Error(result.Err)
+			}
+		}
+
+		t.Fatal(err)
 	}
 	if len(results) != 4 {
 		t.Logf("--> FAILED")
-		t.Fail()
+		t.Fatal("result does not equal to 4")
 	}
 
 	t.Logf("trying Write DROP")
@@ -147,6 +153,6 @@ func TestWrite(t *testing.T) {
 	results, err = conn.Write(s)
 	if err != nil {
 		t.Logf("--> FAILED")
-		t.Fail()
+		t.Fatal(err)
 	}
 }
