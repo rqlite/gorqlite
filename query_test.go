@@ -16,11 +16,11 @@ func TestQueryOne(t *testing.T) {
 
 	t.Logf("trying Write INSERT")
 	s := make([]string, 0)
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 1, 'Romulan', 20000, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 2, 'Vulcan', 20000, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 3, 'Klingon', 20000, 1, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 4, 'Ferengi', 20000, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 5, 'Cardassian', 25000, 1, '{\"met\":\""+met+"\"}', "+met+" )")
+	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 1, 'Romulan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 2, 'Vulcan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 3, 'Klingon', 123.456, 1, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 4, 'Ferengi', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 5, 'Cardassian', 123.456, 1, '{\"met\":\""+met+"\"}', "+met+" )")
 	wResults, err := globalConnection.Write(s)
 	if err != nil {
 		t.Errorf("failed during insert: %v", err.Error())
@@ -32,7 +32,7 @@ func TestQueryOne(t *testing.T) {
 	}
 
 	t.Logf("trying QueryOne")
-	qr, err := globalConnection.QueryOne("SELECT name, ts FROM " + testTableName() + "_full WHERE id > 3")
+	qr, err := globalConnection.QueryOne("SELECT name, ts, wallet, bankrupt, payload FROM " + testTableName() + "_full WHERE id > 3")
 	if err != nil {
 		t.Errorf("failed during query: %v", err.Error())
 	}
@@ -70,12 +70,15 @@ func TestQueryOne(t *testing.T) {
 	var id int64
 	var name string
 	var ts time.Time
+	var wallet float64
+	var bankrupt bool
+	var payload []byte
 	err = qr.Scan(&id, &name)
 	if err == nil {
 		t.Errorf("expected an error to be returned, got nil")
 	}
 
-	err = qr.Scan(&name, &ts)
+	err = qr.Scan(&name, &ts, &wallet, &bankrupt, &payload)
 	if err != nil {
 		t.Errorf("scanning: %v", err.Error())
 	}
@@ -84,7 +87,7 @@ func TestQueryOne(t *testing.T) {
 	}
 
 	qr.Next()
-	err = qr.Scan(&name, &ts)
+	err = qr.Scan(&name, &ts, &wallet, &bankrupt, &payload)
 	if err != nil {
 		t.Errorf("scanning: %s", err.Error())
 	}

@@ -429,6 +429,34 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			default:
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
 			}
+		case *bool:
+			switch src := src.(type) {
+			case int64:
+				b, err := strconv.ParseBool(strconv.FormatInt(src, 10))
+				if err != nil {
+					return err
+				}
+				*d.(*bool) = b
+			case string:
+				b, err := strconv.ParseBool(src)
+				if err != nil {
+					return err
+				}
+				*d.(*bool) = b
+			case bool:
+				*d.(*bool) = src
+			default:
+				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
+			}
+		case *[]uint8:
+			switch src := src.(type) {
+			case []uint8:
+				*d.(*[]uint8) = src
+			case string:
+				*d.(*[]uint8) = []uint8(src)
+			default:
+				return fmt.Errorf("invalid []uint8 col:%d type:%T val:%v", n, src, src)
+			}
 		default:
 			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
 		}
