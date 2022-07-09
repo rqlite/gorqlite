@@ -92,7 +92,7 @@ import (
 
 // QueryOne() is a convenience method that wraps Query() into a single-statement
 // method.
-func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
+func (conn *Connection) QueryOne(sqlStatement string, args ...interface{}) (qr QueryResult, err error) {
 	if conn.hasBeenClosed {
 		qr.Err = ErrClosed
 		return qr, ErrClosed
@@ -106,7 +106,7 @@ func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error
 // Query() is used to perform SELECT operations in the database.
 //
 // It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
-func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
+func (conn *Connection) Query(sqlStatements []string, args ...[]interface{}) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {
@@ -118,7 +118,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
 	// if we get an error POSTing, that's a showstopper
-	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements)
+	response, err := conn.rqliteApiPost(api_QUERY, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult QueryResult

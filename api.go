@@ -114,7 +114,7 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 // 	- lowest level interface - does not do any JSON unmarshaling
 // 	- handles retries
 // 	- handles timeouts
-func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string) ([]byte, error) {
+func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string, parameters [][]interface{}) ([]byte, error) {
 	var responseBody []byte
 
 	// Allow only api_QUERY and api_WRITE
@@ -124,10 +124,28 @@ func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string
 
 	trace("%s: rqliteApiPost() called for a QUERY of %d statements", conn.ID, len(sqlStatements))
 
-	// Send statements as json
-	body, err := json.Marshal(sqlStatements)
+	if len(parameters) == 0 {
+		// Send statements as json
+		body, err := json.Marshal(sqlStatements)
+		if err != nil {
+			return nil, err
+		}
+		return conn.rqliteApiCall(apiOp, "POST", body)
+	}
+
+	var bulkParameterizedBuilder [][]interface{}
+	for _, stmt := range sqlStatements {
+		bulkParameterizedBuilder = append(bulkParameterizedBuilder, []interface{}{stmt})
+	}
+
+	for i, parameter := range parameters {
+		bulkParameterizedBuilder[i] = append(bulkParameterizedBuilder[i], parameter...)
+	}
+
+	body, err := json.Marshal(bulkParameterizedBuilder)
 	if err != nil {
 		return nil, err
 	}
+
 	return conn.rqliteApiCall(apiOp, "POST", body)
 }

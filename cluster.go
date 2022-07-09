@@ -49,9 +49,9 @@ func (rc *rqliteCluster) PeerList() []peer {
 // tell it what peer to talk to and what kind of API operation you're
 // making, and it will return the full URL, from start to finish.
 // e.g.:
-
+//
 // https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
-
+//
 // note: this func needs to live at the Connection level because the
 // Connection holds the username, password, consistencyLevel, etc.
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {

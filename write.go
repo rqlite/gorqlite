@@ -56,24 +56,22 @@ import (
 
 // WriteOne() is a convenience method that wraps Write() into a single-statement
 // method.
-func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
+func (conn *Connection) WriteOne(sqlStatement string, args ...interface{}) (wr WriteResult, err error) {
 	if conn.hasBeenClosed {
 		wr.Err = ErrClosed
 		return wr, ErrClosed
 	}
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-	wra, err := conn.Write(sqlStatements)
+
+	wra, err := conn.Write([]string{sqlStatement}, args)
 	return wra[0], err
 }
 
-func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
+func (conn *Connection) QueueOne(sqlStatement string, args ...interface{}) (seq int64, err error) {
 	if conn.hasBeenClosed {
 		return 0, ErrClosed
 	}
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-	return conn.Queue(sqlStatements)
+
+	return conn.Queue([]string{sqlStatement}, args)
 }
 
 // Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
@@ -83,7 +81,7 @@ func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
 // All statements are executed as a single transaction.
 //
 // Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
-func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
+func (conn *Connection) Write(sqlStatements []string, args ...[]interface{}) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
@@ -95,7 +93,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult WriteResult
@@ -173,7 +171,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 	}
 }
 
-func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
+func (conn *Connection) Queue(sqlStatements []string, args ...[]interface{}) (seq int64, err error) {
 	if conn.hasBeenClosed {
 		return 0, ErrClosed
 	}
@@ -186,7 +184,7 @@ func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 		conn.wantsQueueing = false
 	}()
 
-	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPost(api_WRITE, sqlStatements, args)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		return 0, err
