@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/rqlite/gorqlite"
+	"github.com/rqlite/gorqlite/v2"
 )
 
 func TestClosedConnection(t *testing.T) {
