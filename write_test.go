@@ -1,8 +1,9 @@
 package gorqlite
 
-import "testing"
-
-// import "os"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestWriteOne(t *testing.T) {
 	var wr WriteResult
@@ -57,7 +58,7 @@ func TestWriteOne(t *testing.T) {
 	}
 }
 
-func TestWriteOneQueued(t *testing.T) {
+func TestQueueOne(t *testing.T) {
 	var seq int64
 	var err error
 
@@ -97,6 +98,139 @@ func TestWriteOneQueued(t *testing.T) {
 
 	t.Logf("trying QueueOne DROP")
 	seq, err = conn.QueueOne("DROP TABLE IF EXISTS " + testTableName() + "")
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+}
+
+func TestWriteOneParameterized(t *testing.T) {
+	var wr WriteResult
+	var err error
+
+	t.Logf("trying Open")
+	conn, err := Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	t.Logf("trying WriteOneParameterized DROP")
+	wr, err = conn.WriteOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized CTHULHU (should fail, bad SQL)")
+	wr, err = conn.WriteOneParameterized(
+		ParameterizedStatement{
+			Query: "CTHULHU",
+		},
+	)
+	if err == nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized CREATE")
+	wr, err = conn.WriteOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized INSERT")
+	wr, err = conn.WriteOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("checking WriteOneParameterized RowsAffected")
+	if wr.RowsAffected != 1 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized DROP")
+	wr, err = conn.WriteOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("CDROP TABLE IF EXISTS %s", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+}
+
+func TestQueueOneParameterized(t *testing.T) {
+	var seq int64
+	var err error
+
+	t.Logf("trying Open")
+	conn, err := Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	t.Logf("trying QueueOneParameterized DROP")
+	seq, err = conn.QueueOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying QueueOneParameterized CREATE")
+	seq, err = conn.QueueOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying QueueOneParameterized INSERT")
+	seq, err = conn.QueueOneParameterized(ParameterizedStatement{
+		Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
+	})
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("checking QueueOneParameterized sequence ID")
+	if seq == 0 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying QueueOneParameterized DROP")
+	seq, err = conn.QueueOneParameterized(
+		ParameterizedStatement{
+			Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName()),
+		},
+	)
 	if err != nil {
 		t.Logf("--> FAILED")
 		t.Fail()
@@ -145,6 +279,77 @@ func TestWrite(t *testing.T) {
 	s = make([]string, 0)
 	s = append(s, "DROP TABLE IF EXISTS "+testTableName()+"")
 	results, err = conn.Write(s)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+}
+
+func TestWriteParameterized(t *testing.T) {
+	var results []WriteResult
+	var err error
+
+	t.Logf("trying Open")
+	conn, err := Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	t.Logf("trying WriteParameterized DROP & CREATE")
+	results, err = conn.WriteParameterized(
+		[]ParameterizedStatement{
+			{
+				Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName()),
+			},
+			{
+				Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", testTableName()),
+			},
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteParameterized INSERT")
+	results, err = conn.WriteParameterized(
+		[]ParameterizedStatement{
+			{
+				Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+			{
+				Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+				Arguments: []interface{}{1, "aaa bbb ccc"},
+			},
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	if len(results) != 4 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteParameterized DROP")
+	results, err = conn.WriteParameterized(
+		[]ParameterizedStatement{
+			{
+				Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", testTableName()),
+			},
+		},
+	)
 	if err != nil {
 		t.Logf("--> FAILED")
 		t.Fail()

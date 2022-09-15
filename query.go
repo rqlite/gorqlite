@@ -91,8 +91,7 @@ import (
  * *****************************************************************/
 
 /*
-QueryOne() is a convenience method that wraps Query() into a single-statement
-method.
+QueryOne() is a convenience method that wraps Query() into a single-statement method.
 */
 func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
 	if conn.hasBeenClosed {
@@ -106,11 +105,36 @@ func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error
 }
 
 /*
-Query() is used to perform SELECT operations in the database.
+QueryOneParameterized() is a convenience method that wraps QueryParameterized() into a single-statement method.
+*/
+func (conn *Connection) QueryOneParameterized(statement ParameterizedStatement) (qr QueryResult, err error) {
+	if conn.hasBeenClosed {
+		qr.Err = errClosed
+		return qr, errClosed
+	}
+	qra, err := conn.QueryParameterized([]ParameterizedStatement{statement})
+	return qra[0], err
+}
 
-It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
+/*
+Query() is a convenience method that wraps QueryParameterized() into a single-statement method without parameters.
 */
 func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
+	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
+			Query: sqlStatement,
+		})
+	}
+	return conn.QueryParameterized(parameterizedStatements)
+}
+
+/*
+QueryParameterized() is used to perform SELECT operations in the database.
+
+It takes an array of parameterized SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
+*/
+func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatement) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {

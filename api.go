@@ -23,6 +23,11 @@ import (
 	"strings"
 )
 
+type ParameterizedStatement struct {
+	Query     string
+	Arguments []interface{}
+}
+
 /* *****************************************************************
    method: rqliteApiCall() - internally handles api calls,
 	 													 not supposed to be used by other files
@@ -130,7 +135,7 @@ func (conn *Connection) rqliteApiGet(apiOp apiOperation) ([]byte, error) {
 
  * *****************************************************************/
 
-func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string) ([]byte, error) {
+func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
 	var responseBody []byte
 
 	// Allow only api_QUERY and api_WRITE
@@ -140,8 +145,16 @@ func (conn *Connection) rqliteApiPost(apiOp apiOperation, sqlStatements []string
 
 	trace("%s: rqliteApiPost() called for a QUERY of %d statements", conn.ID, len(sqlStatements))
 
-	// Send statements as json
-	body, err := json.Marshal(sqlStatements)
+	formattedStatements := make([][]interface{}, 0, len(sqlStatements))
+
+	for _, statement := range sqlStatements {
+		formattedStatement := make([]interface{}, 0, len(statement.Arguments)+1)
+		formattedStatement = append(formattedStatement, statement.Query)
+		formattedStatement = append(formattedStatement, statement.Arguments...)
+		formattedStatements = append(formattedStatements, formattedStatement)
+	}
+
+	body, err := json.Marshal(formattedStatements)
 	if err != nil {
 		return nil, err
 	}
