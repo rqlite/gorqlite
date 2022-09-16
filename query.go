@@ -8,6 +8,48 @@ import (
 	"time"
 )
 
+// NullString represents a string that may be null.
+type NullString struct {
+	String string
+	Valid  bool // Valid is true if String is not NULL
+}
+
+// NullInt64 represents an int64 that may be null.
+type NullInt64 struct {
+	Int64 int64
+	Valid bool // Valid is true if Int64 is not NULL
+}
+
+// NullInt32 represents an int32 that may be null.
+type NullInt32 struct {
+	Int32 int32
+	Valid bool // Valid is true if Int32 is not NULL
+}
+
+// NullInt16 represents an int16 that may be null.
+type NullInt16 struct {
+	Int16 int16
+	Valid bool // Valid is true if Int16 is not NULL
+}
+
+// NullFloat64 represents a float64 that may be null.
+type NullFloat64 struct {
+	Float64 float64
+	Valid   bool // Valid is true if Float64 is not NULL
+}
+
+// NullBool represents a bool that may be null.
+type NullBool struct {
+	Bool  bool
+	Valid bool // Valid is true if Bool is not NULL
+}
+
+// NullTime represents a time.Time that may be null.
+type NullTime struct {
+	Time  time.Time
+	Valid bool // Valid is true if Time is not NULL
+}
+
 /* *****************************************************************
 
    method: Connection.Query()
@@ -414,17 +456,13 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 	}
 
 	if len(dest) != len(qr.columns) {
-		return errors.New(fmt.Sprintf("expected %d columns but got %d vars\n", len(qr.columns), len(dest)))
+		return fmt.Errorf("expected %d columns but got %d vars", len(qr.columns), len(dest))
 	}
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for n, d := range dest {
 		src := thisRowValues[n]
-		if src == nil {
-			trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
-			continue
-		}
-		switch d.(type) {
+		switch d := d.(type) {
 		case *time.Time:
 			if src == nil {
 				continue
@@ -433,45 +471,203 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			if err != nil {
 				return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
 			}
-			*d.(*time.Time) = t
+			*d = t
 		case *int:
 			switch src := src.(type) {
 			case float64:
-				*d.(*int) = int(src)
+				*d = int(src)
 			case int64:
-				*d.(*int) = int(src)
+				*d = int(src)
 			case string:
 				i, err := strconv.Atoi(src)
 				if err != nil {
 					return err
 				}
-				*d.(*int) = i
+				*d = i
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int col:%d type:%T val:%v", n, src, src)
 			}
 		case *int64:
 			switch src := src.(type) {
 			case float64:
-				*d.(*int64) = int64(src)
+				*d = int64(src)
 			case int64:
-				*d.(*int64) = src
+				*d = src
 			case string:
 				i, err := strconv.ParseInt(src, 10, 64)
 				if err != nil {
 					return err
 				}
-				*d.(*int64) = i
+				*d = i
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
 			}
 		case *float64:
-			*d.(*float64) = float64(src.(float64))
+			switch src := src.(type) {
+			case float64:
+				*d = src
+			case int64:
+				*d = float64(src)
+			case string:
+				f, err := strconv.ParseFloat(src, 64)
+				if err != nil {
+					return err
+				}
+				*d = f
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+			default:
+				return fmt.Errorf("invalid float64 col:%d type:%T val:%v", n, src, src)
+			}
 		case *string:
 			switch src := src.(type) {
 			case string:
-				*d.(*string) = src
+				*d = src
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
+			}
+		case *bool:
+			switch src := src.(type) {
+			case float64:
+				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
+				if err != nil {
+					return err
+				}
+				*d = b
+			case int64:
+				b, err := strconv.ParseBool(strconv.FormatInt(src, 10))
+				if err != nil {
+					return err
+				}
+				*d = b
+			case string:
+				b, err := strconv.ParseBool(src)
+				if err != nil {
+					return err
+				}
+				*d = b
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+			default:
+				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullString:
+			switch src := src.(type) {
+			case string:
+				*d = NullString{Valid: true, String: src}
+			case nil:
+				*d = NullString{Valid: false}
+			default:
+				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt64:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt64{Valid: true, Int64: int64(src)}
+			case int64:
+				*d = NullInt64{Valid: true, Int64: src}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 64)
+				if err != nil {
+					return err
+				}
+				*d = NullInt64{Valid: true, Int64: i}
+			case nil:
+				*d = NullInt64{Valid: false}
+			default:
+				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt32:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt32{Valid: true, Int32: int32(src)}
+			case int64:
+				*d = NullInt32{Valid: true, Int32: int32(src)}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 32)
+				if err != nil {
+					return err
+				}
+				*d = NullInt32{Valid: true, Int32: int32(i)}
+			case nil:
+				*d = NullInt32{Valid: false}
+			default:
+				return fmt.Errorf("invalid int32 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt16:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt16{Valid: true, Int16: int16(src)}
+			case int64:
+				*d = NullInt16{Valid: true, Int16: int16(src)}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 16)
+				if err != nil {
+					return err
+				}
+				*d = NullInt16{Valid: true, Int16: int16(i)}
+			case nil:
+				*d = NullInt16{Valid: false}
+			default:
+				return fmt.Errorf("invalid int16 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullFloat64:
+			switch src := src.(type) {
+			case float64:
+				*d = NullFloat64{Valid: true, Float64: src}
+			case int64:
+				*d = NullFloat64{Valid: true, Float64: float64(src)}
+			case string:
+				f, err := strconv.ParseFloat(src, 64)
+				if err != nil {
+					return err
+				}
+				*d = NullFloat64{Valid: true, Float64: f}
+			case nil:
+				*d = NullFloat64{Valid: false}
+			default:
+				return fmt.Errorf("invalid float64 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullBool:
+			switch src := src.(type) {
+			case float64:
+				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case int64:
+				b, err := strconv.ParseBool(strconv.FormatInt(src, 10))
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case string:
+				b, err := strconv.ParseBool(src)
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case nil:
+				*d = NullBool{Valid: false}
+			default:
+				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullTime:
+			if src == nil {
+				*d = NullTime{Valid: false}
+			} else {
+				t, err := toTime(src)
+				if err != nil {
+					return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
+				}
+				*d = NullTime{Valid: true, Time: t}
 			}
 		default:
 			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
