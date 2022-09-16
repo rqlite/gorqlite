@@ -136,6 +136,24 @@ gorqlite.TraceOn(os.Stderr)
 
 // turn off
 gorqlite.TraceOff()
+
+// using parameterized statements
+wr, err := conn.WriteParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)", 
+			Arguments: []interface{}{7, "James Bond", []byte{0x42}}
+		}
+	}
+)
+// alternatively
+wr, err := conn.WriteOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+	},
+)
+
 ```
 
 ### Queued Writes
