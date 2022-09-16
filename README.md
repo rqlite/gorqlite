@@ -141,16 +141,45 @@ gorqlite.TraceOff()
 wr, err := conn.WriteParameterized(
 	[]gorqlite.ParameterizedStatement{
 		{
-			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)", 
-			Arguments: []interface{}{7, "James Bond", []byte{0x42}}
-		}
-	}
+			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		},
+	},
 )
+seq, err := conn.QueueParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		},
+	},
+)
+qr, err := conn.QueryParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "SELECT id, name from secret_agents where id > ?",
+			Arguments: []interface{}{3},
+		},
+	},
+)
+
 // alternatively
 wr, err := conn.WriteOneParameterized(
 	gorqlite.ParameterizedStatement{
 		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
 		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+	},
+)
+seq, err := conn.QueueOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+	},
+)
+qr, err := conn.QueryOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "SELECT id, name from secret_agents where id > ?",
+		Arguments: []interface{}{3},
 	},
 )
 
