@@ -183,6 +183,19 @@ qr, err := conn.QueryOneParameterized(
 	},
 )
 
+// using nullable types
+var id int64
+var name gorqlite.NullString
+rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
+for rows.Next() {
+	err := rows.Scan(&id, &name)
+}
+if name.Valid {
+	// use name.String
+} else {
+	// NULL value
+}
+
 ```
 
 ### Queued Writes
