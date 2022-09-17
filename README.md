@@ -136,6 +136,66 @@ gorqlite.TraceOn(os.Stderr)
 
 // turn off
 gorqlite.TraceOff()
+
+// using parameterized statements
+wr, err := conn.WriteParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		},
+	},
+)
+seq, err := conn.QueueParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		},
+	},
+)
+qr, err := conn.QueryParameterized(
+	[]gorqlite.ParameterizedStatement{
+		{
+			Query:     "SELECT id, name from secret_agents where id > ?",
+			Arguments: []interface{}{3},
+		},
+	},
+)
+
+// alternatively
+wr, err := conn.WriteOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+	},
+)
+seq, err := conn.QueueOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
+		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+	},
+)
+qr, err := conn.QueryOneParameterized(
+	gorqlite.ParameterizedStatement{
+		Query:     "SELECT id, name from secret_agents where id > ?",
+		Arguments: []interface{}{3},
+	},
+)
+
+// using nullable types
+var id int64
+var name gorqlite.NullString
+rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
+for rows.Next() {
+	err := rows.Scan(&id, &name)
+}
+if name.Valid {
+	// use name.String
+} else {
+	// NULL value
+}
+
 ```
 
 ### Queued Writes

@@ -55,10 +55,8 @@ import (
  * *****************************************************************/
 
 /*
-WriteOne() is a convenience method that wraps Write() into a single-statement
-method.
+WriteOne() is a convenience method that wraps Write() into a single-statement method.
 */
-
 func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
 	if conn.hasBeenClosed {
 		wr.Err = errClosed
@@ -70,25 +68,41 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 	return wra[0], err
 }
 
-func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
+/*
+WriteOneParameterized() is a convenience method that wraps WriteParameterized() into a single-statement method.
+*/
+func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) (wr WriteResult, err error) {
 	if conn.hasBeenClosed {
-		return 0, errClosed
+		wr.Err = errClosed
+		return wr, errClosed
 	}
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-	return conn.Queue(sqlStatements)
+	wra, err := conn.WriteParameterized([]ParameterizedStatement{statement})
+	return wra[0], err
 }
 
 /*
-Write() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
+Write() is a convenience method that wraps WriteParameterized() into a single-statement method without parameters.
+*/
+func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
+	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
+			Query: sqlStatement,
+		})
+	}
+	return conn.WriteParameterized(parameterizedStatements)
+}
 
-Write() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
+/*
+WriteParameterized() is used to perform DDL/DML in the database.  ALTER, CREATE, DELETE, DROP, INSERT, UPDATE, etc. all go through Write().
+
+WriteParameterized() takes an array of SQL statements, and returns an equal-sized array of WriteResults, each corresponding to the SQL statement that produced it.
 
 All statements are executed as a single transaction.
 
-Write() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+WriteParameterized() returns an error if one is encountered during its operation.  If it's something like a call to the rqlite API, then it'll return that error.  If one statement out of several has an error, it will return a generic "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
 */
-func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
+func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
@@ -180,7 +194,42 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 	}
 }
 
+/*
+QueueOne() is a convenience method that wraps Queue() into a single-statement method.
+*/
+func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
+	if conn.hasBeenClosed {
+		return 0, errClosed
+	}
+	sqlStatements := make([]string, 0)
+	sqlStatements = append(sqlStatements, sqlStatement)
+	return conn.Queue(sqlStatements)
+}
+
+/*
+QueueOneParameterized() is a convenience method that wraps QueueParameterized() into a single-statement method.
+*/
+func (conn *Connection) QueueOneParameterized(statement ParameterizedStatement) (seq int64, err error) {
+	if conn.hasBeenClosed {
+		return 0, errClosed
+	}
+	return conn.QueueParameterized([]ParameterizedStatement{statement})
+}
+
+/*
+Queue() is a convenience method that wraps QueueParameterized() into a single-statement method without parameters.
+*/
 func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
+	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
+			Query: sqlStatement,
+		})
+	}
+	return conn.QueueParameterized(parameterizedStatements)
+}
+
+func (conn *Connection) QueueParameterized(sqlStatements []ParameterizedStatement) (seq int64, err error) {
 	if conn.hasBeenClosed {
 		return 0, errClosed
 	}
