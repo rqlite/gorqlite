@@ -94,6 +94,28 @@ func TestClosedConnection(t *testing.T) {
 		}
 	})
 
+	t.Run("WriteOneParameterized", func(t *testing.T) {
+		_, err := conn.WriteOneParameterized(gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("WriteOneParameterizedContext", func(t *testing.T) {
+		_, err := conn.WriteOneParameterizedContext(context.Background(), gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
 	t.Run("QueueOne", func(t *testing.T) {
 		_, err := conn.QueueOne("")
 		if err == nil {
@@ -107,6 +129,28 @@ func TestClosedConnection(t *testing.T) {
 
 	t.Run("QueueOneContext", func(t *testing.T) {
 		_, err := conn.QueueOneContext(context.Background(), "")
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueueOneParameterized", func(t *testing.T) {
+		_, err := conn.QueueOneParameterized(gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueueOneParameterizedContext", func(t *testing.T) {
+		_, err := conn.QueueOneParameterizedContext(context.Background(), gorqlite.ParameterizedStatement{})
 		if err == nil {
 			t.Errorf("expected error, got nil")
 		}
@@ -138,6 +182,28 @@ func TestClosedConnection(t *testing.T) {
 		}
 	})
 
+	t.Run("WriteParameterized", func(t *testing.T) {
+		_, err := conn.WriteParameterized([]gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("WriteParameterizedContext", func(t *testing.T) {
+		_, err := conn.WriteParameterizedContext(context.Background(), []gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
 	t.Run("Queue", func(t *testing.T) {
 		_, err := conn.Queue([]string{})
 		if err == nil {
@@ -151,6 +217,28 @@ func TestClosedConnection(t *testing.T) {
 
 	t.Run("QueueContext", func(t *testing.T) {
 		_, err := conn.QueueContext(context.Background(), []string{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueueParameterized", func(t *testing.T) {
+		_, err := conn.QueueParameterized([]gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueueParameterizedContext", func(t *testing.T) {
+		_, err := conn.QueueParameterizedContext(context.Background(), []gorqlite.ParameterizedStatement{})
 		if err == nil {
 			t.Errorf("expected error, got nil")
 		}
@@ -182,6 +270,28 @@ func TestClosedConnection(t *testing.T) {
 		}
 	})
 
+	t.Run("QueryOneParameterized", func(t *testing.T) {
+		_, err := conn.QueryOneParameterized(gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueryOneParameterizedContext", func(t *testing.T) {
+		_, err := conn.QueryOneParameterizedContext(context.Background(), gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
 	t.Run("Query", func(t *testing.T) {
 		_, err := conn.Query([]string{})
 		if err == nil {
@@ -195,6 +305,28 @@ func TestClosedConnection(t *testing.T) {
 
 	t.Run("QueryContext", func(t *testing.T) {
 		_, err := conn.QueryContext(context.Background(), []string{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueryParameterized", func(t *testing.T) {
+		_, err := conn.QueryParameterized([]gorqlite.ParameterizedStatement{})
+		if err == nil {
+			t.Errorf("expected error, got nil")
+		}
+
+		if !errors.Is(err, gorqlite.ErrClosed) {
+			t.Errorf("expected error to be ErrClosed, got %v", err)
+		}
+	})
+
+	t.Run("QueryParameterizedContext", func(t *testing.T) {
+		_, err := conn.QueryParameterizedContext(context.Background(), []gorqlite.ParameterizedStatement{})
 		if err == nil {
 			t.Errorf("expected error, got nil")
 		}

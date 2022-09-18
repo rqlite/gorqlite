@@ -1,5 +1,5 @@
-// gorqlite
-// A golang database/sql driver for rqlite, the distributed consistent sqlite.
+// Package gorqlite provieds a database/sql-like driver for rqlite,
+// the distributed consistent sqlite.
 //
 // Copyright (c)2016 andrew fabbro (andrew@fabbro.org)
 //
@@ -60,22 +60,24 @@ func init() {
 	consistencyLevels["strong"] = ConsistencyLevelStrong
 }
 
-// Open() creates and returns a "connection" to rqlite.
+// Open creates and returns a "connection" to rqlite.
 //
-// Since rqlite is stateless, there is no actual connection.  Open() creates and initializes a gorqlite Connection type, which represents various config information.
+// Since rqlite is stateless, there is no actual connection.
+// Open() creates and initializes a gorqlite Connection type,
+// which represents various config information.
 //
 // The URL should be in a form like this:
 //
-//      http://localhost:4001
+//	http://localhost:4001
 //
-//      http://     default, no auth, localhost:4001
-//      https://    default, no auth, localhost:4001, using https
+//	http://     default, no auth, localhost:4001
+//	https://    default, no auth, localhost:4001, using https
 //
-//      http://localhost:1234
-//      http://mary:secret2@localhost:1234
+//	http://localhost:1234
+//	http://mary:secret2@localhost:1234
 //
-//      https://mary:secret2@somewhere.example.com:1234
-//      https://mary:secret2@somewhere.example.com // will use 4001
+//	https://mary:secret2@somewhere.example.com:1234
+//	https://mary:secret2@somewhere.example.com // will use 4001
 func Open(connURL string) (*Connection, error) {
 	var conn = &Connection{}
 
@@ -106,9 +108,7 @@ func Open(connURL string) (*Connection, error) {
 	return conn, err
 }
 
-// func: trace()
-//
-// adds a message to the trace output
+// trace adds a message to the trace output
 //
 // not a public function.  we (inside) can add - outside they can
 // only see.
@@ -118,7 +118,7 @@ func Open(connURL string) (*Connection, error) {
 // This is done so that the more expensive Sprintf() stuff is
 // done only if truly needed.  When tracing is off, calls to
 // trace() just hit a bool check and return.  If tracing is on,
-// then the Sprintfing is done at a leisurely pace because, well,
+// then the Sprintf-ing is done at a leisurely pace because, well,
 // we're tracing.
 //
 // Premature optimization is the root of all evil, so this is
@@ -141,7 +141,7 @@ func trace(pattern string, args ...interface{}) {
 	traceOut.Write([]byte(msg))
 }
 
-// Turns on tracing output to the io.Writer of your choice.
+// TraceOn turns on tracing output to the io.Writer of your choice.
 //
 // Trace output is very detailed and verbose, as you might expect.
 //
@@ -152,7 +152,7 @@ func TraceOn(w io.Writer) {
 	wantsTrace = true
 }
 
-// Turns off tracing output.  Once you call TraceOff(), no further
+// TraceOff turns off tracing output. Once you call TraceOff(), no further
 // info is sent to the io.Writer, unless it is TraceOn'd again.
 func TraceOff() {
 	wantsTrace = false

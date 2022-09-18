@@ -2,11 +2,11 @@ package gorqlite_test
 
 import (
 	"context"
+	"fmt"
+	"github.com/rqlite/gorqlite/v2"
 	"testing"
 	"time"
 )
-
-// import "os"
 
 func TestWriteOne(t *testing.T) {
 	t.Run("WriteOne CREATE", func(t *testing.T) {
@@ -56,24 +56,9 @@ func TestWriteOne(t *testing.T) {
 			t.Errorf("wr.RowsAffected must be 1")
 		}
 	})
-
-	t.Run("WriteOne INSERT parameterized", func(t *testing.T) {
-		wr, err := globalConnection.WriteOne("INSERT INTO "+testTableName()+" (id, name) VALUES ( ?, ? )", 2, "aaa bbb ccc")
-		if err != nil {
-			t.Errorf("failed during insert: %v - %v", err.Error(), wr.Err.Error())
-		}
-
-		if err == nil && wr.Err != nil {
-			t.Errorf("wr.Err must be nil if err is nil: %v", wr.Err.Error())
-		}
-
-		if wr.RowsAffected != 1 {
-			t.Errorf("wr.RowsAffected must be 1")
-		}
-	})
 }
 
-func TestWriteOneQueued(t *testing.T) {
+func TestQueueOne(t *testing.T) {
 	t.Run("QueueOne DROP", func(t *testing.T) {
 		tableName := RandStringBytes(8)
 		seq, err := globalConnection.QueueOne("DROP TABLE IF EXISTS " + tableName)
@@ -100,27 +85,92 @@ func TestWriteOneQueued(t *testing.T) {
 			t.Errorf("seq must not be 0")
 		}
 	})
-
-	t.Run("QueueOne INSERT parameterized", func(t *testing.T) {
-		seq, err := globalConnection.QueueOne("INSERT INTO "+testTableName()+" (id, name) VALUES ( ?, ? )", 11, "aaa bbb ccc")
-		if err != nil {
-			t.Errorf("failed during insert: %v - %v", err.Error(), seq)
-		}
-
-		if seq == 0 {
-			t.Errorf("seq must not be 0")
-		}
-	})
 }
 
 func TestQueueOneContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	seq, err := globalConnection.QueueOneContext(ctx, "INSERT INTO "+testTableName()+" (id, name) VALUES ( ?, ? )", 120, "aaa bbb ccc")
+	seq, err := globalConnection.QueueOneContext(ctx, fmt.Sprintf("INSERT INTO "+testTableName()+" (id, name) VALUES ( %d, %s )", 120, "aaa bbb ccc"))
 	if err != nil {
 		t.Errorf("failed during insert: %v - %v", err.Error(), seq)
 	}
+}
+
+func TestWriteOneParameterized(t *testing.T) {
+	var wr gorqlite.WriteResult
+	var err error
+
+	t.Logf("trying WriteOneParameterized CTHULHU (should fail, bad SQL)")
+	wr, err = globalConnection.WriteOneParameterized(
+		gorqlite.ParameterizedStatement{
+			Query: "CTHULHU",
+		},
+	)
+	if err == nil {
+		t.Logf("--> FAILED, expected an error but got none")
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized CREATE")
+	wr, err = globalConnection.WriteOneParameterized(
+		gorqlite.ParameterizedStatement{
+			Query: fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id integer, name text)", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED (%s)", err.Error())
+		t.Fail()
+	}
+
+	t.Logf("trying WriteOneParameterized INSERT")
+	wr, err = globalConnection.WriteOneParameterized(
+		gorqlite.ParameterizedStatement{
+			Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED (%s)", err.Error())
+		t.Fail()
+	}
+
+	t.Logf("checking WriteOneParameterized RowsAffected")
+	if wr.RowsAffected != 1 {
+		t.Logf("--> FAILED, expected 1 row affected, got %d", wr.RowsAffected)
+		t.Fail()
+	}
+}
+
+func TestQueueOneParameterized(t *testing.T) {
+	var seq int64
+	var err error
+
+	t.Logf("trying QueueOneParameterized CREATE")
+	seq, err = globalConnection.QueueOneParameterized(
+		gorqlite.ParameterizedStatement{
+			Query: fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id integer, name text)", testTableName()),
+		},
+	)
+	if err != nil {
+		t.Logf("--> FAILED (%s)", err.Error())
+		t.Fail()
+	}
+
+	t.Logf("trying QueueOneParameterized INSERT")
+	seq, err = globalConnection.QueueOneParameterized(gorqlite.ParameterizedStatement{
+		Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
+	})
+	if err != nil {
+		t.Logf("--> FAILED (%s)", err.Error())
+		t.Fail()
+	}
+
+	t.Logf("checking QueueOneParameterized sequence ID")
+	if seq == 0 {
+		t.Logf("--> FAILED, expected a sequence ID, got 0")
+		t.Fail()
+	}
+
 }
 
 func TestWrite(t *testing.T) {
@@ -152,6 +202,57 @@ func TestWrite(t *testing.T) {
 
 		if len(results) != 4 {
 			t.Errorf("expected results to be length of 4, got: %d", len(results))
+		}
+	})
+}
+
+func TestWriteParameterized(t *testing.T) {
+	t.Run("DROP", func(t *testing.T) {
+		tableName := RandStringBytes(8)
+		_, err := globalConnection.WriteParameterized(
+			[]gorqlite.ParameterizedStatement{
+				{
+					Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName),
+				},
+				{
+					Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", tableName),
+				},
+			},
+		)
+		if err != nil {
+			t.Logf("--> FAILED (%s)", err.Error())
+			t.Fail()
+		}
+	})
+
+	t.Run("INSERT", func(t *testing.T) {
+		results, err := globalConnection.WriteParameterized(
+			[]gorqlite.ParameterizedStatement{
+				{
+					Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+					Arguments: []interface{}{1, "aaa bbb ccc"},
+				},
+				{
+					Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+					Arguments: []interface{}{1, "aaa bbb ccc"},
+				},
+				{
+					Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+					Arguments: []interface{}{1, "aaa bbb ccc"},
+				},
+				{
+					Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
+					Arguments: []interface{}{1, "aaa bbb ccc"},
+				},
+			},
+		)
+		if err != nil {
+			t.Logf("--> FAILED (%s)", err.Error())
+			t.Fail()
+		}
+		if len(results) != 4 {
+			t.Logf("--> FAILED, expected 4 results, got %d", len(results))
+			t.Fail()
 		}
 	})
 }

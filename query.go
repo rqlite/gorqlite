@@ -9,6 +9,48 @@ import (
 	"time"
 )
 
+// NullString represents a string that may be null.
+type NullString struct {
+	String string
+	Valid  bool // Valid is true if String is not NULL
+}
+
+// NullInt64 represents an int64 that may be null.
+type NullInt64 struct {
+	Int64 int64
+	Valid bool // Valid is true if Int64 is not NULL
+}
+
+// NullInt32 represents an int32 that may be null.
+type NullInt32 struct {
+	Int32 int32
+	Valid bool // Valid is true if Int32 is not NULL
+}
+
+// NullInt16 represents an int16 that may be null.
+type NullInt16 struct {
+	Int16 int16
+	Valid bool // Valid is true if Int16 is not NULL
+}
+
+// NullFloat64 represents a float64 that may be null.
+type NullFloat64 struct {
+	Float64 float64
+	Valid   bool // Valid is true if Float64 is not NULL
+}
+
+// NullBool represents a bool that may be null.
+type NullBool struct {
+	Bool  bool
+	Valid bool // Valid is true if Bool is not NULL
+}
+
+// NullTime represents a time.Time that may be null.
+type NullTime struct {
+	Time  time.Time
+	Valid bool // Valid is true if Time is not NULL
+}
+
 /* *****************************************************************
 
    method: Connection.Query()
@@ -91,36 +133,76 @@ import (
 
  * *****************************************************************/
 
-// QueryOne() is a convenience method that wraps Query() into a single-statement
-// method.
-func (conn *Connection) QueryOne(sqlStatement string, args ...interface{}) (qr QueryResult, err error) {
-	if conn.hasBeenClosed {
-		qr.Err = ErrClosed
-		return qr, ErrClosed
-	}
-
-	qra, err := conn.Query([]string{sqlStatement}, args)
-	return qra[0], err
-}
-
-func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string, args ...interface{}) (qr QueryResult, err error) {
-	if conn.hasBeenClosed {
-		qr.Err = ErrClosed
-		return qr, ErrClosed
-	}
-
-	qra, err := conn.QueryContext(ctx, []string{sqlStatement}, args)
-	return qra[0], err
-}
-
-// Query() is used to perform SELECT operations in the database.
+// QueryOne is a convenience method that wraps Query into a single-statement method.
 //
-// It takes an array of SQL statements and executes them in a single transaction, returning an array of QueryResult vars.
-func (conn *Connection) Query(sqlStatements []string, args ...[]interface{}) (results []QueryResult, err error) {
-	return conn.QueryContext(context.Background(), sqlStatements, args...)
+// QueryOne uses context.Background() internally; to specify the context, use QueryOneContext.
+func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
+	sqlStatements := make([]string, 0)
+	sqlStatements = append(sqlStatements, sqlStatement)
+
+	qra, err := conn.Query(sqlStatements)
+	return qra[0], err
 }
 
-func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string, args ...[]interface{}) (results []QueryResult, err error) {
+// QueryOneContext is a convenience method that wraps Query into a single-statement method.
+func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string) (qr QueryResult, err error) {
+	sqlStatements := make([]string, 0)
+	sqlStatements = append(sqlStatements, sqlStatement)
+
+	qra, err := conn.QueryContext(ctx, sqlStatements)
+	return qra[0], err
+}
+
+// QueryOneParameterized is a convenience method that wraps QueryParameterized into a single-statement method.
+//
+// QueryOneParameterized uses context.Background() internally; to specify the context, use QueryOneParameterizedContext.
+func (conn *Connection) QueryOneParameterized(statement ParameterizedStatement) (qr QueryResult, err error) {
+	qra, err := conn.QueryParameterized([]ParameterizedStatement{statement})
+	return qra[0], err
+}
+
+// QueryOneParameterizedContext is a convenience method that wraps QueryParameterizedContext into a single-statement method.
+func (conn *Connection) QueryOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (qr QueryResult, err error) {
+	qra, err := conn.QueryParameterizedContext(ctx, []ParameterizedStatement{statement})
+	return qra[0], err
+}
+
+// Query is used to perform SELECT operations in the database. It takes an array of SQL statements and
+// executes them in a single transaction, returning an array of QueryResult vars.
+//
+// Query uses context.Background() internally; to specify the context, use QueryContext.
+func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
+	return conn.QueryContext(context.Background(), sqlStatements)
+}
+
+// QueryContext is used to perform SELECT operations in the database. It takes an array of SQL statements and
+// executes them in a single transaction, returning an array of QueryResult vars.
+func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string) (results []QueryResult, err error) {
+	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
+			Query: sqlStatement,
+		})
+	}
+
+	return conn.QueryParameterizedContext(ctx, parameterizedStatements)
+}
+
+// QueryParameterized is used to perform SELECT operations in the database.
+//
+// It takes an array of parameterized SQL statements and executes them in a single transaction,
+// returning an array of QueryResult vars.
+//
+// QueryParameterized uses context.Background() internally; to specify the context, use QueryParameterizedContext.
+func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatement) (results []QueryResult, err error) {
+	return conn.QueryParameterizedContext(context.Background(), sqlStatements)
+}
+
+// QueryParameterizedContext is used to perform SELECT operations in the database.
+//
+// It takes an array of parameterized SQL statements and executes them in a single transaction,
+// returning an array of QueryResult vars.
+func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
 	if conn.hasBeenClosed {
@@ -129,10 +211,11 @@ func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string
 		results = append(results, errResult)
 		return results, ErrClosed
 	}
+
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
 	// if we get an error POSTing, that's a showstopper
-	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements, args)
+	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		var errResult QueryResult
@@ -224,7 +307,7 @@ func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string
 //
 // So if you were to query:
 //
-//   SELECT id, name FROM some_table;
+//	SELECT id, name FROM some_table;
 //
 // then a QueryResult would hold any errors from that query, a list of columns and types, and the actual row values.
 //
@@ -260,7 +343,7 @@ func (qr *QueryResult) Columns() []string {
 
  * *****************************************************************/
 
-// Map() returns the current row (as advanced by Next()) as a map[string]interface{}
+// Map returns the current row (as advanced by Next()) as a map[string]interface{}.
 //
 // The key is a string corresponding to a column name.
 // The value is the corresponding column.
@@ -301,17 +384,17 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 
  * *****************************************************************/
 
-// Next() positions the QueryResult result pointer so that Scan() or Map() is ready.
+// Next positions the QueryResult result pointer so that Scan() or Map() is ready.
 //
 // You should call Next() first, but gorqlite will fix it if you call Map() or Scan() before
 // the initial Next().
 //
 // A common idiom:
 //
-//      rows := conn.Write(something)
-//      for rows.Next() {
-//          // your Scan/Map and processing here.
-//      }
+//	rows := conn.Write(something)
+//	for rows.Next() {
+//	    // your Scan/Map and processing here.
+//	}
 func (qr *QueryResult) Next() bool {
 	if qr.rowNumber >= int64(len(qr.values)-1) {
 		return false
@@ -327,7 +410,7 @@ func (qr *QueryResult) Next() bool {
 
  * *****************************************************************/
 
-// NumRows() returns the number of rows returned by the query.
+// NumRows returns the number of rows returned by the query.
 func (qr *QueryResult) NumRows() int64 {
 	return int64(len(qr.values))
 }
@@ -338,7 +421,7 @@ func (qr *QueryResult) NumRows() int64 {
 
  * *****************************************************************/
 
-// RowNumber() returns the current row number as Next() iterates through the result's rows.
+// RowNumber returns the current row number as Next() iterates through the result's rows.
 func (qr *QueryResult) RowNumber() int64 {
 	return qr.rowNumber
 }
@@ -365,14 +448,15 @@ func toTime(src interface{}) (time.Time, error) {
 
  * *****************************************************************/
 
-// Scan() takes a list of pointers and then updates them to reflect he current row's data.
+// Scan takes a list of pointers and then updates them to reflect the current row's data.
 //
 // Note that only the following data types are used, and they
 // are a subset of the types JSON uses:
-// 	string, for JSON strings
-// 	float64, for JSON numbers
-// 	int64, as a convenient extension
-// 	nil for JSON null
+//
+//	string, for JSON strings
+//	float64, for JSON numbers
+//	int64, as a convenient extension
+//	nil for JSON null
 //
 // booleans, JSON arrays, and JSON objects are not supported,
 // since sqlite does not support them.
@@ -384,17 +468,13 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 	}
 
 	if len(dest) != len(qr.columns) {
-		return errors.New(fmt.Sprintf("expected %d columns but got %d vars\n", len(qr.columns), len(dest)))
+		return fmt.Errorf("expected %d columns but got %d vars", len(qr.columns), len(dest))
 	}
 
 	thisRowValues := qr.values[qr.rowNumber].([]interface{})
 	for n, d := range dest {
 		src := thisRowValues[n]
-		if src == nil {
-			trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
-			continue
-		}
-		switch d.(type) {
+		switch d := d.(type) {
 		case *time.Time:
 			if src == nil {
 				continue
@@ -403,73 +483,214 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			if err != nil {
 				return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
 			}
-			*d.(*time.Time) = t
+			*d = t
 		case *int:
 			switch src := src.(type) {
 			case float64:
-				*d.(*int) = int(src)
+				*d = int(src)
 			case int64:
-				*d.(*int) = int(src)
+				*d = int(src)
 			case string:
 				i, err := strconv.Atoi(src)
 				if err != nil {
 					return err
 				}
-				*d.(*int) = i
+				*d = i
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int col:%d type:%T val:%v", n, src, src)
 			}
 		case *int64:
 			switch src := src.(type) {
 			case float64:
-				*d.(*int64) = int64(src)
+				*d = int64(src)
 			case int64:
-				*d.(*int64) = src
+				*d = src
 			case string:
 				i, err := strconv.ParseInt(src, 10, 64)
 				if err != nil {
 					return err
 				}
-				*d.(*int64) = i
+				*d = i
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
 			}
 		case *float64:
-			*d.(*float64) = float64(src.(float64))
+			switch src := src.(type) {
+			case float64:
+				*d = src
+			case int64:
+				*d = float64(src)
+			case string:
+				f, err := strconv.ParseFloat(src, 64)
+				if err != nil {
+					return err
+				}
+				*d = f
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+			default:
+				return fmt.Errorf("invalid float64 col:%d type:%T val:%v", n, src, src)
+			}
 		case *string:
 			switch src := src.(type) {
 			case string:
-				*d.(*string) = src
+				*d = src
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
 			}
 		case *bool:
 			switch src := src.(type) {
+			case float64:
+				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
+				if err != nil {
+					return err
+				}
+				*d = b
 			case int64:
 				b, err := strconv.ParseBool(strconv.FormatInt(src, 10))
 				if err != nil {
 					return err
 				}
-				*d.(*bool) = b
+				*d = b
 			case string:
 				b, err := strconv.ParseBool(src)
 				if err != nil {
 					return err
 				}
-				*d.(*bool) = b
+				*d = b
 			case bool:
-				*d.(*bool) = src
+				*d = src
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
 			}
 		case *[]uint8:
 			switch src := src.(type) {
 			case []uint8:
-				*d.(*[]uint8) = src
+				*d = src
 			case string:
-				*d.(*[]uint8) = []uint8(src)
+				*d = []uint8(src)
 			default:
 				return fmt.Errorf("invalid []uint8 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullString:
+			switch src := src.(type) {
+			case string:
+				*d = NullString{Valid: true, String: src}
+			case nil:
+				*d = NullString{Valid: false}
+			default:
+				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt64:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt64{Valid: true, Int64: int64(src)}
+			case int64:
+				*d = NullInt64{Valid: true, Int64: src}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 64)
+				if err != nil {
+					return err
+				}
+				*d = NullInt64{Valid: true, Int64: i}
+			case nil:
+				*d = NullInt64{Valid: false}
+			default:
+				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt32:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt32{Valid: true, Int32: int32(src)}
+			case int64:
+				*d = NullInt32{Valid: true, Int32: int32(src)}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 32)
+				if err != nil {
+					return err
+				}
+				*d = NullInt32{Valid: true, Int32: int32(i)}
+			case nil:
+				*d = NullInt32{Valid: false}
+			default:
+				return fmt.Errorf("invalid int32 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullInt16:
+			switch src := src.(type) {
+			case float64:
+				*d = NullInt16{Valid: true, Int16: int16(src)}
+			case int64:
+				*d = NullInt16{Valid: true, Int16: int16(src)}
+			case string:
+				i, err := strconv.ParseInt(src, 10, 16)
+				if err != nil {
+					return err
+				}
+				*d = NullInt16{Valid: true, Int16: int16(i)}
+			case nil:
+				*d = NullInt16{Valid: false}
+			default:
+				return fmt.Errorf("invalid int16 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullFloat64:
+			switch src := src.(type) {
+			case float64:
+				*d = NullFloat64{Valid: true, Float64: src}
+			case int64:
+				*d = NullFloat64{Valid: true, Float64: float64(src)}
+			case string:
+				f, err := strconv.ParseFloat(src, 64)
+				if err != nil {
+					return err
+				}
+				*d = NullFloat64{Valid: true, Float64: f}
+			case nil:
+				*d = NullFloat64{Valid: false}
+			default:
+				return fmt.Errorf("invalid float64 col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullBool:
+			switch src := src.(type) {
+			case float64:
+				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case int64:
+				b, err := strconv.ParseBool(strconv.FormatInt(src, 10))
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case string:
+				b, err := strconv.ParseBool(src)
+				if err != nil {
+					return err
+				}
+				*d = NullBool{Valid: true, Bool: b}
+			case nil:
+				*d = NullBool{Valid: false}
+			default:
+				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
+			}
+		case *NullTime:
+			if src == nil {
+				*d = NullTime{Valid: false}
+			} else {
+				t, err := toTime(src)
+				if err != nil {
+					return fmt.Errorf("%v: bad time col:(%d/%s) val:%v", err, n, qr.Columns()[n], src)
+				}
+				*d = NullTime{Valid: true, Time: t}
 			}
 		default:
 			return fmt.Errorf("unknown destination type (%T) to scan into in variable #%d", d, n)
@@ -485,7 +706,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 
  * *****************************************************************/
 
-// Types() returns an array of the column's types.
+// Types returns an array of the column's types.
 //
 // Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  So you can initialize a column as CHAR(3) but it's really TEXT.  See https://www.sqlite.org/datatype3.html
 //

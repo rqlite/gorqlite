@@ -41,10 +41,10 @@ var wantsTrace bool
 
  * *****************************************************************/
 
-// The connection abstraction.	 Note that since rqlite is stateless,
-// there really is no "connection".  However, this type holds
-// information such as the current leader, peers, connection
-// string to build URLs, etc.
+// Connection provides the connection abstraction.
+// Note that since rqlite is stateless, there really is no "connection".
+// However, this type holds  information such as the current leader, peers,
+// connection string to build URLs, etc.
 //
 // Connections are assigned a "connection ID" which is a pseudo-UUID
 // for connection identification in trace output only.  This helps
@@ -107,7 +107,7 @@ func (conn *Connection) Leader() (string, error) {
 	return string(conn.cluster.leader), nil
 }
 
-// Peers teels the current peers of the cluster
+// Peers tells the current peers of the cluster
 func (conn *Connection) Peers() ([]string, error) {
 	if conn.hasBeenClosed {
 		var ans []string
@@ -163,29 +163,29 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //
 // URL format:
 //
-// 	http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
+//	http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
 //
 // Examples:
 //
-// 	https://mary:secret2@localhost:4001/db
-// 	https://mary:secret2@server1.example.com:4001/db?level=none
-// 	https://mary:secret2@server2.example.com:4001/db?level=weak
-// 	https://mary:secret2@localhost:2265/db?level=strong
+//	https://mary:secret2@localhost:4001/db
+//	https://mary:secret2@server1.example.com:4001/db?level=none
+//	https://mary:secret2@server2.example.com:4001/db?level=weak
+//	https://mary:secret2@localhost:2265/db?level=strong
 //
 // to use default connection to localhost:4001 with no auth:
-// 	http://
-// 	https://
+//
+//	http://
+//	https://
 //
 // guaranteed map fields - will be set to "" if not specified
 //
-// 	field name                  default if not specified
+//	field name                  default if not specified
 //
-// 	username                    ""
-// 	password                    ""
-// 	hostname                    "localhost"
-// 	port                        "4001"
-// 	consistencyLevel            "weak"
-//
+//	username                    ""
+//	password                    ""
+//	hostname                    "localhost"
+//	port                        "4001"
+//	consistencyLevel            "weak"
 func (conn *Connection) initConnection(url string) error {
 	// do some sanity checks.  You know users.
 

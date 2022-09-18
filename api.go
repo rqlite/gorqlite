@@ -21,6 +21,11 @@ import (
 	"strings"
 )
 
+type ParameterizedStatement struct {
+	Query     string
+	Arguments []interface{}
+}
+
 // method: rqliteApiCall() - internally handles api calls,
 // not supposed to be used by other files
 //
@@ -115,7 +120,7 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 // 	- lowest level interface - does not do any JSON unmarshaling
 // 	- handles retries
 // 	- handles timeouts
-func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []string, parameters [][]interface{}) ([]byte, error) {
+func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
 	var responseBody []byte
 
 	// Allow only api_QUERY and api_WRITE
@@ -125,27 +130,16 @@ func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, s
 
 	trace("%s: rqliteApiPost() called for a QUERY of %d statements", conn.ID, len(sqlStatements))
 
-	if len(parameters) == 0 {
-		// Send statements as json
-		body, err := json.Marshal(sqlStatements)
-		if err != nil {
-			return nil, err
-		}
-		return conn.rqliteApiCall(ctx, apiOp, "POST", body)
+	formattedStatements := make([][]interface{}, 0, len(sqlStatements))
+
+	for _, statement := range sqlStatements {
+		formattedStatement := make([]interface{}, 0, len(statement.Arguments)+1)
+		formattedStatement = append(formattedStatement, statement.Query)
+		formattedStatement = append(formattedStatement, statement.Arguments...)
+		formattedStatements = append(formattedStatements, formattedStatement)
 	}
 
-	// If the parameters exists, whether is a single query or a batch,
-	// we should use the bulk API.
-	var bulkParameterizedBuilder [][]interface{}
-	for _, stmt := range sqlStatements {
-		bulkParameterizedBuilder = append(bulkParameterizedBuilder, []interface{}{stmt})
-	}
-
-	for i, parameter := range parameters {
-		bulkParameterizedBuilder[i] = append(bulkParameterizedBuilder[i], parameter...)
-	}
-
-	body, err := json.Marshal(bulkParameterizedBuilder)
+	body, err := json.Marshal(formattedStatements)
 	if err != nil {
 		return nil, err
 	}
