@@ -3,9 +3,10 @@ package gorqlite_test
 import (
 	"context"
 	"fmt"
-	"github.com/rqlite/gorqlite/v2"
 	"testing"
 	"time"
+
+	"github.com/rqlite/gorqlite/v2"
 )
 
 func TestQueryOne(t *testing.T) {
@@ -243,8 +244,7 @@ func TestQueryOneParameterized(t *testing.T) {
 	t.Logf("trying WriteOne DROP")
 	_, err = globalConnection.WriteOne("DROP TABLE IF EXISTS " + testTableName())
 	if err != nil {
-		t.Logf("--> FATAL")
-		t.Fatal()
+		t.Errorf("dropping table: %s", err.Error())
 	}
 
 	// give an extra second for time diff between local and rqlite
@@ -253,106 +253,97 @@ func TestQueryOneParameterized(t *testing.T) {
 	t.Logf("trying WriteOne CREATE")
 	_, err = globalConnection.WriteOne("CREATE TABLE " + testTableName() + " (id integer, name text, ts DATETIME DEFAULT CURRENT_TIMESTAMP)")
 	if err != nil {
-		t.Logf("--> FATAL")
-		t.Fatal()
+		t.Errorf("craeting new table: %s", err.Error())
 	}
 
 	// When the Federation met the Cardassians
 	meeting := time.Date(2424, 1, 2, 17, 0, 0, 0, time.UTC)
 	met := fmt.Sprint(meeting.Unix())
 
-	t.Logf("trying Write INSERT")
-	s := make([]string, 0)
-	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 1, 'Romulan' )")
-	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 2, 'Vulcan' )")
-	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 3, 'Klingon' )")
-	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 4, 'Ferengi' )")
-	s = append(s, "INSERT INTO "+testTableName()+" (id, name, ts) VALUES ( 5, 'Cardassian',"+met+" )")
-	_, err = globalConnection.Write(s)
-	if err != nil {
-		t.Logf("--> FATAL")
-		t.Fatal()
-	}
+	t.Run("INSERT", func(t *testing.T) {
+		s := make([]string, 0)
+		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 1, 'Romulan' )")
+		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 2, 'Vulcan' )")
+		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 3, 'Klingon' )")
+		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 4, 'Ferengi' )")
+		s = append(s, "INSERT INTO "+testTableName()+" (id, name, ts) VALUES ( 5, 'Cardassian',"+met+" )")
+		_, err = globalConnection.Write(s)
+		if err != nil {
+			t.Errorf("inserting bulk queries: %s", err.Error())
+		}
+	})
 
-	t.Logf("trying QueryOneParameterized")
-	qr, err = globalConnection.QueryOneParameterized(
-		gorqlite.ParameterizedStatement{
-			Query:     fmt.Sprintf("SELECT name, ts FROM %s WHERE id > ?", testTableName()),
-			Arguments: []interface{}{3},
-		},
-	)
-	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
-	}
+	t.Run("QueryOneParameterized", func(t *testing.T) {
+		qr, err = globalConnection.QueryOneParameterized(
+			gorqlite.ParameterizedStatement{
+				Query:     fmt.Sprintf("SELECT name, ts FROM %s WHERE id > ?", testTableName()),
+				Arguments: []interface{}{3},
+			},
+		)
+		if err != nil {
+			t.Errorf("executing query: %s", err.Error())
+		}
 
-	t.Logf("trying Next()")
-	na := qr.Next()
-	if na != true {
-		t.Logf("--> FAILED")
-		t.Fail()
-	}
+		na := qr.Next()
+		if na != true {
+			t.Error("next should return true, got false")
+		}
 
-	t.Logf("trying Map()")
-	r, err := qr.Map()
-	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
-	}
-	if r["name"].(string) != "Ferengi" {
-		t.Logf("--> FAILED, expected 'Ferengi', got %s", r["name"].(string))
-		t.Fail()
-	}
-	if ts, ok := r["ts"]; ok {
-		if ts, ok := ts.(time.Time); ok {
-			// time should not be zero because it defaults to current utc time
-			if ts.IsZero() {
-				t.Logf("--> FAILED: time is zero")
-				t.Fail()
-			} else if ts.Before(started) {
-				t.Logf("--> FAILED: time %q is before start %q", ts, started)
-				t.Fail()
+		r, err := qr.Map()
+		if err != nil {
+			t.Errorf("map: %s", err.Error())
+		}
+		if r["name"].(string) != "Ferengi" {
+			t.Errorf("expected 'Ferengi', got %s", r["name"].(string))
+		}
+		if ts, ok := r["ts"]; ok {
+			if tss, ok := ts.(time.Time); ok {
+				// time should not be zero because it defaults to current utc time
+				if tss.IsZero() {
+					t.Error("time is zero")
+				} else if tss.Before(started) {
+					t.Errorf("time %q is before start %q", tss, started)
+				}
+			} else {
+				t.Errorf("ts is a real %T", ts)
 			}
 		} else {
-			t.Logf("--> FAILED: ts is a real %T", ts)
-			t.Fail()
+			t.Error("ts not found")
 		}
-	} else {
-		t.Logf("--> FAILED: ts not found")
-	}
 
-	t.Logf("trying Scan(), also float64->int64 in Scan()")
-	var id int64
-	var name string
-	var ts time.Time
-	err = qr.Scan(&id, &name)
-	if err == nil {
-		t.Logf("--> FAILED")
-		t.Fail()
-	}
-	err = qr.Scan(&name, &ts)
-	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
-	}
-	if name != "Ferengi" {
-		t.Logf("--> FAILED, name should be 'Ferengi' but it's '%s'", name)
-		t.Fail()
-	}
-	qr.Next()
-	err = qr.Scan(&name, &ts)
-	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
-	}
-	if name != "Cardassian" {
-		t.Logf("--> FAILED, name should be 'Cardassian' but it's '%s'", name)
-		t.Fail()
-	}
-	if ts != meeting {
-		t.Logf("--> FAILED, time should be %q but it's %q", meeting, ts)
-		t.Fail()
-	}
+		t.Logf("trying Scan(), also float64->int64 in Scan()")
+		var id int64
+		var name string
+		var ts time.Time
+
+		err = qr.Scan(&id, &name)
+		if err == nil {
+			t.Error("expected an error, got nil")
+		}
+
+		err = qr.Scan(&name, &ts)
+		if err != nil {
+			t.Errorf("scanning: %s", err.Error())
+		}
+
+		if name != "Ferengi" {
+			t.Errorf("name should be 'Ferengi' but it's '%s'", name)
+		}
+
+		qr.Next()
+		err = qr.Scan(&name, &ts)
+		if err != nil {
+			t.Errorf("scanning: %s", err.Error())
+		}
+
+		if name != "Cardassian" {
+			t.Errorf("name should be 'Cardassian' but it's '%s'", name)
+		}
+
+		if ts != meeting {
+			t.Errorf("time should be %q but it's %q", meeting, ts)
+		}
+	})
 
 	t.Logf("trying WriteOne DELETE FROM")
 	_, err = globalConnection.WriteOne("DELETE FROM " + testTableName() + "")
@@ -376,22 +367,19 @@ func TestScanNullableTypes(t *testing.T) {
 	s = append(s, "INSERT INTO "+testTableName()+"_nullable (id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime) VALUES (2, 'Romulan', 1, 2, 3, 4.5, 1, "+met+")")
 	_, err = globalConnection.Write(s)
 	if err != nil {
-		t.Logf("--> FATAL")
-		t.Fatal()
+		t.Errorf("insert queries: %s", err.Error())
 	}
 
 	t.Logf("trying QueryOne")
 	qr, err = globalConnection.QueryOne("SELECT id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime FROM " + testTableName() + "_nullable WHERE id IN (1, 2)")
 	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
+		t.Errorf("query one: %s", err.Error())
 	}
 
 	t.Logf("trying Next()")
 	na := qr.Next()
 	if na != true {
-		t.Logf("--> FAILED")
-		t.Fail()
+		t.Error("expected next to be true, got false")
 	}
 
 	t.Logf("trying Scan()")
@@ -405,92 +393,75 @@ func TestScanNullableTypes(t *testing.T) {
 	var nullTime gorqlite.NullTime
 	err = qr.Scan(&id, &nullString, &nullInt64, &nullInt32, &nullInt16, &nullFloat64, &nullBool, &nullTime)
 	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
+		t.Errorf("scanning: %s", err.Error())
 	}
+
 	if id != 1 {
-		t.Logf("--> FAILED, id should be 1 but it's %v", id)
-		t.Fail()
+		t.Errorf("id should be 1 but it's %v", id)
 	}
+
 	if nullString.Valid || nullString.String != "" {
-		t.Logf("--> FAILED, nullString should be invalid and unset but it's '%v' and '%v'", nullString.Valid, nullString.String)
-		t.Fail()
+		t.Errorf("nullString should be invalid and unset but it's '%v' and '%v'", nullString.Valid, nullString.String)
 	}
+
 	if nullInt64.Valid || nullInt64.Int64 != 0 {
-		t.Logf("--> FAILED, nullInt64 should be invalid and unset but it's '%v' and '%v'", nullInt64.Valid, nullInt64.Int64)
-		t.Fail()
+		t.Errorf("nullInt64 should be invalid and unset but it's '%v' and '%v'", nullInt64.Valid, nullInt64.Int64)
 	}
 	if nullInt32.Valid || nullInt32.Int32 != 0 {
-		t.Logf("--> FAILED, nullInt32 should be invalid and unset but it's '%v' and '%v'", nullInt32.Valid, nullInt32.Int32)
-		t.Fail()
+		t.Errorf("nullInt32 should be invalid and unset but it's '%v' and '%v'", nullInt32.Valid, nullInt32.Int32)
 	}
 	if nullInt16.Valid || nullInt16.Int16 != 0 {
-		t.Logf("--> FAILED, nullInt16 should be invalid and unset but it's '%v' and '%v'", nullInt16.Valid, nullInt16.Int16)
-		t.Fail()
+		t.Errorf("nullInt16 should be invalid and unset but it's '%v' and '%v'", nullInt16.Valid, nullInt16.Int16)
 	}
 	if nullFloat64.Valid || nullFloat64.Float64 != 0 {
-		t.Logf("--> FAILED, nullFloat64 should be invalid and unset but it's '%v' and '%v'", nullFloat64.Valid, nullFloat64.Float64)
-		t.Fail()
+		t.Errorf("nullFloat64 should be invalid and unset but it's '%v' and '%v'", nullFloat64.Valid, nullFloat64.Float64)
 	}
 	if nullBool.Valid || nullBool.Bool != false {
-		t.Logf("--> FAILED, nullBool should be invalid and unset but it's '%v' and '%v'", nullBool.Valid, nullBool.Bool)
-		t.Fail()
+		t.Errorf("nullBool should be invalid and unset but it's '%v' and '%v'", nullBool.Valid, nullBool.Bool)
 	}
 	if nullTime.Valid || !nullTime.Time.IsZero() {
-		t.Logf("--> FAILED, nullTime should be invalid and unset but it's '%v' and '%v'", nullTime.Valid, nullTime.Time)
-		t.Fail()
+		t.Errorf("nullTime should be invalid and unset but it's '%v' and '%v'", nullTime.Valid, nullTime.Time)
 	}
 
 	t.Logf("trying Next()")
 	qr.Next()
 	if na != true {
-		t.Logf("--> FAILED")
-		t.Fail()
+		t.Error("expected next to be true, got false")
 	}
 
 	t.Logf("trying Scan()")
 	err = qr.Scan(&id, &nullString, &nullInt64, &nullInt32, &nullInt16, &nullFloat64, &nullBool, &nullTime)
 	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
+		t.Errorf("scanning: %s", err.Error())
 	}
 	if id != 2 {
-		t.Logf("--> FAILED, id should be 2 but it's %v", id)
-		t.Fail()
+		t.Errorf("id should be 2 but it's %v", id)
 	}
 	if !nullString.Valid || nullString.String != "Romulan" {
-		t.Logf("--> FAILED, nullString should be valid and set to 'Romulan' but it's '%v'", nullString.String)
-		t.Fail()
+		t.Errorf("nullString should be valid and set to 'Romulan' but it's '%v'", nullString.String)
 	}
 	if !nullInt64.Valid || nullInt64.Int64 != 1 {
-		t.Logf("--> FAILED, nullInt64 should be valid and set to 1 but it's '%v'", nullInt64.Int64)
-		t.Fail()
+		t.Errorf("nullInt64 should be valid and set to 1 but it's '%v'", nullInt64.Int64)
 	}
 	if !nullInt32.Valid || nullInt32.Int32 != 2 {
-		t.Logf("--> FAILED, nullInt32 should be valid and set to 2 but it's '%v'", nullInt32.Int32)
-		t.Fail()
+		t.Errorf("nullInt32 should be valid and set to 2 but it's '%v'", nullInt32.Int32)
 	}
 	if !nullInt16.Valid || nullInt16.Int16 != 3 {
-		t.Logf("--> FAILED, nullInt16 should be valid and set to 3 but it's '%v'", nullInt16.Int16)
-		t.Fail()
+		t.Errorf("nullInt16 should be valid and set to 3 but it's '%v'", nullInt16.Int16)
 	}
 	if !nullFloat64.Valid || nullFloat64.Float64 != 4.5 {
-		t.Logf("--> FAILED, nullFloat64 should be valid and set to 4.5 but it's '%v'", nullFloat64.Float64)
-		t.Fail()
+		t.Errorf("nullFloat64 should be valid and set to 4.5 but it's '%v'", nullFloat64.Float64)
 	}
 	if !nullBool.Valid || nullBool.Bool != true {
-		t.Logf("--> FAILED, nullBool should be valid and set to true but it's '%v'", nullBool.Bool)
-		t.Fail()
+		t.Errorf("nullBool should be valid and set to true but it's '%v'", nullBool.Bool)
 	}
 	if !nullTime.Valid || !nullTime.Time.Equal(meeting) {
-		t.Logf("--> FAILED, nullTime should be valid and set to '%v' but it's '%v'", meeting, nullTime.Time)
-		t.Fail()
+		t.Errorf("nullTime should be valid and set to '%v' but it's '%v'", meeting, nullTime.Time)
 	}
 
 	t.Logf("trying WriteOne DELETE FROM")
 	_, err = globalConnection.WriteOne("DELETE FROM " + testTableName() + "_nullable")
 	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
+		t.Errorf("delete from: %s", err.Error())
 	}
 }

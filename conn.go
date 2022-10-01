@@ -193,7 +193,7 @@ func (conn *Connection) initConnection(url string) error {
 		return errors.New("url specified is impossibly short")
 	}
 
-	if strings.HasPrefix(url, "http") == false {
+	if !strings.HasPrefix(url, "http") {
 		return errors.New("url does not start with 'http'")
 	}
 
@@ -266,7 +266,7 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
-	if conn.wantsHTTPS == true {
+	if conn.wantsHTTPS {
 		trace("%s:    %s -> %s", conn.ID, "wants https?", "yes")
 	} else {
 		trace("%s:    %s -> %s", conn.ID, "wants https?", "no")

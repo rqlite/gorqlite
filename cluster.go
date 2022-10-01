@@ -38,6 +38,8 @@ type rqliteCluster struct {
 	conn     *Connection
 }
 
+// PeerList lists the peers within a rqlite cluster.
+//
 // In the api calls, we'll want to try the leader first, then the other
 // peers. To make looping easy, this function returns a list of peers
 // in the order the try them: leader, other peer, other peer, etc.
@@ -58,7 +60,7 @@ func (rc *rqliteCluster) PeerList() []peer {
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	var builder strings.Builder
 
-	if conn.wantsHTTPS == true {
+	if conn.wantsHTTPS {
 		builder.WriteString("https")
 	} else {
 		builder.WriteString("http")
@@ -202,9 +204,8 @@ func (conn *Connection) updateClusterInfo() error {
 	if rc.leader != "" {
 		rc.peerList = append(rc.peerList, rc.leader)
 	}
-	for _, p := range rc.otherPeers {
-		rc.peerList = append(rc.peerList, p)
-	}
+
+	rc.peerList = append(rc.peerList, rc.otherPeers...)
 
 	// dump to trace
 	trace("%s: here is my cluster config:", conn.ID)

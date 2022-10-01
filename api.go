@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -29,13 +29,13 @@ type ParameterizedStatement struct {
 // method: rqliteApiCall() - internally handles api calls,
 // not supposed to be used by other files
 //
-// 	- handles retries
-// 	- handles timeouts
+//   - handles retries
+//   - handles timeouts
 func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
 	// Verify that we have at least a single peer to which we can make the request
 	peers := conn.cluster.PeerList()
 	if len(peers) < 1 {
-		return nil, errors.New("I don't have any cluster info")
+		return nil, errors.New("don't have any cluster info")
 	}
 	trace("%s: I have a peer list %d peers long", conn.ID, len(peers))
 
@@ -76,15 +76,15 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 
 		// Read response body now that we've got a successful answer
 		trace("%s: client.Do() OK", conn.ID)
-		responseBody, err := ioutil.ReadAll(response.Body)
+		responseBody, err := io.ReadAll(response.Body)
 		if err != nil {
-			trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
+			trace("%s: got error '%s' doing io.ReadAll", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
 			response.Body.Close()
 			continue
 		}
 		response.Body.Close()
-		trace("%s: ioutil.ReadAll() OK", conn.ID)
+		trace("%s: io.ReadAll() OK", conn.ID)
 
 		return responseBody, nil
 	}
@@ -98,11 +98,11 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	return nil, errors.New(builder.String())
 }
 
-//    method: rqliteApiGet() - for api_STATUS and api_NODES
+//	   method: rqliteApiGet() - for api_STATUS and api_NODES
 //
-// 	- lowest level interface - does not do any JSON unmarshaling
-// 	- handles retries
-// 	- handles timeouts
+//		- lowest level interface - does not do any JSON unmarshaling
+//		- handles retries
+//		- handles timeouts
 func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([]byte, error) {
 	var responseBody []byte
 	trace("%s: rqliteApiGet() called", conn.ID)
@@ -115,11 +115,11 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 	return conn.rqliteApiCall(ctx, apiOp, "GET", nil)
 }
 
-//    method: rqliteApiPost() - for api_QUERY and api_WRITE
+//	   method: rqliteApiPost() - for api_QUERY and api_WRITE
 //
-// 	- lowest level interface - does not do any JSON unmarshaling
-// 	- handles retries
-// 	- handles timeouts
+//		- lowest level interface - does not do any JSON unmarshaling
+//		- handles retries
+//		- handles timeouts
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
 	var responseBody []byte
 

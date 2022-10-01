@@ -291,7 +291,7 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
 	if numStatementErrors > 0 {
-		return results, errors.New(fmt.Sprintf("there were %d statement errors", numStatementErrors))
+		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
 	} else {
 		return results, nil
 	}
@@ -564,8 +564,6 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 					return err
 				}
 				*d = b
-			case bool:
-				*d = src
 			case nil:
 				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
@@ -573,7 +571,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			}
 		case *[]uint8:
 			switch src := src.(type) {
-			case []uint8:
+			case []byte:
 				*d = src
 			case string:
 				*d = []uint8(src)

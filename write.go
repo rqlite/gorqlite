@@ -220,7 +220,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
 	if numStatementErrors > 0 {
-		return results, errors.New(fmt.Sprintf("there were %d statement errors", numStatementErrors))
+		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
 	} else {
 		return results, nil
 	}

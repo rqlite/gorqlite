@@ -19,7 +19,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"strings"
 )
 
@@ -47,7 +46,7 @@ const (
 )
 
 func init() {
-	traceOut = ioutil.Discard
+	traceOut = io.Discard
 
 	consistencyLevelNames = make(map[consistencyLevel]string)
 	consistencyLevelNames[ConsistencyLevelNone] = "none"
@@ -127,7 +126,7 @@ func Open(connURL string) (*Connection, error) {
 // Don't put a \n in your Sprintf pattern becuase trace() adds one
 func trace(pattern string, args ...interface{}) {
 	// don't do the probably expensive Sprintf() if not needed
-	if wantsTrace == false {
+	if !wantsTrace {
 		return
 	}
 
@@ -156,5 +155,5 @@ func TraceOn(w io.Writer) {
 // info is sent to the io.Writer, unless it is TraceOn'd again.
 func TraceOff() {
 	wantsTrace = false
-	traceOut = ioutil.Discard
+	traceOut = io.Discard
 }
