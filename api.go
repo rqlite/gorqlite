@@ -71,16 +71,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 			continue
 		}
 
-		// Check response code before reading body
-		if response.StatusCode != http.StatusOK {
-			trace("%s: got code %s", conn.ID, response.Status)
-			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s", url, response.Status))
-			response.Body.Close()
-			continue
-		}
-
-		// Read response body now that we've got a successful answer
-		trace("%s: client.Do() OK", conn.ID)
+		// Read response body even if not a successful answer to return a descriptive error message
 		responseBody, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
@@ -88,8 +79,17 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 			response.Body.Close()
 			continue
 		}
-		response.Body.Close()
 		trace("%s: ioutil.ReadAll() OK", conn.ID)
+
+		// Check that we've got a successful answer
+		if response.StatusCode != http.StatusOK {
+			trace("%s: got code %s", conn.ID, response.Status)
+			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, message: %s", url, response.Status, string(responseBody)))
+			response.Body.Close()
+			continue
+		}
+		response.Body.Close()
+		trace("%s: client.Do() OK", conn.ID)
 
 		return responseBody, nil
 	}
