@@ -84,7 +84,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		// Check that we've got a successful answer
 		if response.StatusCode != http.StatusOK {
 			trace("%s: got code %s", conn.ID, response.Status)
-			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, response: %s", url, response.Status, string(responseBody)))
+			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, message: %s", url, response.Status, string(responseBody)))
 			response.Body.Close()
 			continue
 		}
