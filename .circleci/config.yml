@@ -4,7 +4,7 @@ jobs:
     working_directory: ~/rqlite/src/github.com/rqlite/gorqlite
     docker:
       - image: circleci/golang:1.12
-      - image: rqlite/rqlite:7.6.1
+      - image: rqlite/rqlite:latest
     steps:
         - checkout
         - run: go vet .
