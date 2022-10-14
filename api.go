@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	nurl "net/url"
 	"strings"
 )
 
@@ -55,7 +56,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		req, err := http.NewRequest(method, url, bytes.NewBuffer(requestBody))
 		if err != nil {
 			trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
-			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
+			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
 			continue
 		}
 		trace("%s: http.NewRequest() OK", conn.ID)
@@ -67,7 +68,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		response, err := conn.client.Do(req)
 		if err != nil {
 			trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
-			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
+			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
 			continue
 		}
 
@@ -75,7 +76,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		responseBody, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
-			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", url, err.Error()))
+			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
 			response.Body.Close()
 			continue
 		}
@@ -84,7 +85,7 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		// Check that we've got a successful answer
 		if response.StatusCode != http.StatusOK {
 			trace("%s: got code %s", conn.ID, response.Status)
-			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, message: %s", url, response.Status, string(responseBody)))
+			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, message: %s", redactURL(url), response.Status, string(responseBody)))
 			response.Body.Close()
 			continue
 		}
@@ -101,6 +102,14 @@ func (conn *Connection) rqliteApiCall(apiOp apiOperation, method string, request
 		builder.WriteString(fmt.Sprintf("   peer #%d: %s\n", n, v))
 	}
 	return nil, errors.New(builder.String())
+}
+
+func redactURL(url string) string {
+	u, err := nurl.Parse(url)
+	if err != nil {
+		return ""
+	}
+	return u.Redacted()
 }
 
 /* *****************************************************************
