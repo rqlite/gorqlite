@@ -142,7 +142,7 @@ wr, err := conn.WriteParameterized(
 	[]gorqlite.ParameterizedStatement{
 		{
 			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+			Arguments: []interface{}{7, "James Bond", "not-a-secret"},
 		},
 	},
 )
@@ -150,7 +150,7 @@ seq, err := conn.QueueParameterized(
 	[]gorqlite.ParameterizedStatement{
 		{
 			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-			Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+			Arguments: []interface{}{7, "James Bond", "not-a-secret"},
 		},
 	},
 )
@@ -167,13 +167,13 @@ qr, err := conn.QueryParameterized(
 wr, err := conn.WriteOneParameterized(
 	gorqlite.ParameterizedStatement{
 		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		Arguments: []interface{}{7, "James Bond", "not-a-secret"},
 	},
 )
 seq, err := conn.QueueOneParameterized(
 	gorqlite.ParameterizedStatement{
 		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-		Arguments: []interface{}{7, "James Bond", []byte{0x42}},
+		Arguments: []interface{}{7, "James Bond", "not-a-secret"},
 	},
 )
 qr, err := conn.QueryOneParameterized(
@@ -184,11 +184,10 @@ qr, err := conn.QueryOneParameterized(
 )
 
 // using nullable types
-var id int64
 var name gorqlite.NullString
-rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
+rows, err := conn.QueryOne("select name from secret_agents where id = 7")
 for rows.Next() {
-	err := rows.Scan(&id, &name)
+	err := rows.Scan(&name)
 }
 if name.Valid {
 	// use name.String
