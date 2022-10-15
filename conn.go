@@ -25,6 +25,7 @@ import (
 const defaultTimeout = 10
 
 var (
+	// ErrClosed indicates that client connection was closed
 	ErrClosed = errors.New("gorqlite: connection is closed")
 	traceOut  io.Writer
 )
@@ -32,7 +33,6 @@ var (
 // defaults to false.  This is used in trace() to quickly
 // return if tracing is off, so that we don't do a perhaps
 // expensive Sprintf() call only to send it to Discard
-
 var wantsTrace bool
 
 /* *****************************************************************
@@ -57,9 +57,7 @@ var wantsTrace bool
 type Connection struct {
 	cluster rqliteCluster
 
-	/*
-	  name               type                default
-	*/
+	// name           type                default
 
 	username          string           //   username or ""
 	password          string           //   username or ""
@@ -208,7 +206,6 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	// specs say Username() is always populated even if empty
-
 	if u.User == nil {
 		conn.username = ""
 		conn.password = ""

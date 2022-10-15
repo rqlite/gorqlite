@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func Test_RedactURL(t *testing.T) {
+func TestRedactURL(t *testing.T) {
 	tests := []struct {
 		name string
 		url  string

@@ -19,11 +19,12 @@ func TestQueryOne(t *testing.T) {
 
 	t.Logf("trying Write INSERT")
 	s := make([]string, 0)
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 1, 'Romulan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 2, 'Vulcan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 3, 'Klingon', 123.456, 1, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 4, 'Ferengi', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
-	s = append(s, "INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( 5, 'Cardassian', 123.456, 1, '{\"met\":\""+met+"\"}', "+met+" )")
+	s = append(s, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT, wallet REAL, bankrupt INTEGER, payload BLOB, ts DATETIME)")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( 1, 'Romulan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( 2, 'Vulcan', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( 3, 'Klingon', 123.456, 1, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( 4, 'Ferengi', 123.456, 0, '{\"met\":\""+met+"\"}', "+fmt.Sprint(time.Now().Unix())+" )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( 5, 'Cardassian', 123.456, 1, '{\"met\":\""+met+"\"}', "+met+" )")
 	wResults, err := globalConnection.Write(s)
 	if err != nil {
 		t.Errorf("failed during insert: %v", err.Error())
@@ -34,10 +35,25 @@ func TestQueryOne(t *testing.T) {
 		}
 	}
 
+	t.Cleanup(func() {
+		results, err := globalConnection.Write([]string{"DROP TABLE " + testTableName()})
+		if err != nil {
+			t.Errorf("failed during dropping table: %s", err.Error())
+			for _, r := range results {
+				if r.Err != nil {
+					t.Errorf("caught error: %s", err.Error())
+				}
+			}
+		}
+	})
+
 	t.Run("Normal case", func(t *testing.T) {
-		qr, err := globalConnection.QueryOne("SELECT name, ts, wallet, bankrupt, payload FROM " + testTableName() + "_full WHERE id > 3")
+		qr, err := globalConnection.QueryOne("SELECT name, ts, wallet, bankrupt, payload FROM " + testTableName() + " WHERE id > 3")
 		if err != nil {
 			t.Errorf("failed during query: %v", err.Error())
+			if qr.Err != nil {
+				t.Errorf("query errors: %s", qr.Err.Error())
+			}
 		}
 
 		if qr.NumRows() != 2 {
@@ -91,7 +107,7 @@ func TestQueryOne(t *testing.T) {
 				t.Errorf("ts is a real %T", ts)
 			}
 		} else {
-			t.Logf("--> FAILED: ts not found")
+			t.Errorf("ts not found")
 		}
 
 		t.Logf("trying Scan(), also float64->int64 in Scan()")
@@ -149,7 +165,7 @@ func TestQueryOne(t *testing.T) {
 	})
 
 	t.Run("Map before next", func(t *testing.T) {
-		qr, err := globalConnection.QueryOne("SELECT name  FROM " + testTableName() + "_full WHERE id = 3")
+		qr, err := globalConnection.QueryOne("SELECT name  FROM " + testTableName() + " WHERE id = 3")
 		if err != nil {
 			t.Errorf("failed during query: %v - %v", err.Error(), qr.Err.Error())
 		}
@@ -161,7 +177,7 @@ func TestQueryOne(t *testing.T) {
 	})
 
 	t.Run("Scan before next", func(t *testing.T) {
-		qr, err := globalConnection.QueryOne("SELECT name FROM " + testTableName() + "_full WHERE id = 3")
+		qr, err := globalConnection.QueryOne("SELECT name FROM " + testTableName() + " WHERE id = 3")
 		if err != nil {
 			t.Errorf("failed during query: %v - %v", err.Error(), qr.Err.Error())
 		}
@@ -178,12 +194,27 @@ func TestQueryOneContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	now := time.Now().Round(time.Second)
-
 	wResults, err := globalConnection.WriteOneContext(
 		ctx,
+		"CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT, wallet REAL, bankrupt INTEGER, payload BLOB, ts DATETIME)",
+	)
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wResults.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		result, err := globalConnection.WriteOne("DROP TABLE " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), result.Err.Error())
+		}
+	})
+
+	now := time.Now().Round(time.Second)
+
+	wResults, err = globalConnection.WriteOneContext(
+		ctx,
 		fmt.Sprintf(
-			"INSERT INTO "+testTableName()+"_full (id, name, wallet, bankrupt, payload, ts) VALUES ( %d, %q, %v, %t, null, %q )",
+			"INSERT INTO "+testTableName()+" (id, name, wallet, bankrupt, payload, ts) VALUES ( %d, %q, %v, %t, null, %q )",
 			11,
 			"Vulcan",
 			889.3332,
@@ -196,7 +227,7 @@ func TestQueryOneContext(t *testing.T) {
 	}
 
 	t.Logf("trying QueryOne")
-	qr, err := globalConnection.QueryOneContext(ctx, "SELECT id, name, wallet, bankrupt, ts FROM "+testTableName()+"_full WHERE id = 11")
+	qr, err := globalConnection.QueryOneContext(ctx, "SELECT id, name, wallet, bankrupt, ts FROM "+testTableName()+" WHERE id = 11")
 	if err != nil {
 		t.Errorf("failed during query: %v - %v", err.Error(), qr.Err.Error())
 	}
@@ -256,22 +287,27 @@ func TestQueryOneParameterized(t *testing.T) {
 		t.Errorf("craeting new table: %s", err.Error())
 	}
 
+	t.Cleanup(func() {
+		_, err = globalConnection.WriteOne("DROP TABLE " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s", err.Error())
+		}
+	})
+
 	// When the Federation met the Cardassians
 	meeting := time.Date(2424, 1, 2, 17, 0, 0, 0, time.UTC)
 	met := fmt.Sprint(meeting.Unix())
 
-	t.Run("INSERT", func(t *testing.T) {
-		s := make([]string, 0)
-		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 1, 'Romulan' )")
-		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 2, 'Vulcan' )")
-		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 3, 'Klingon' )")
-		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 4, 'Ferengi' )")
-		s = append(s, "INSERT INTO "+testTableName()+" (id, name, ts) VALUES ( 5, 'Cardassian',"+met+" )")
-		_, err = globalConnection.Write(s)
-		if err != nil {
-			t.Errorf("inserting bulk queries: %s", err.Error())
-		}
-	})
+	s := make([]string, 0)
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 1, 'Romulan' )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 2, 'Vulcan' )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 3, 'Klingon' )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 4, 'Ferengi' )")
+	s = append(s, "INSERT INTO "+testTableName()+" (id, name, ts) VALUES ( 5, 'Cardassian',"+met+" )")
+	_, err = globalConnection.Write(s)
+	if err != nil {
+		t.Errorf("inserting bulk queries: %s", err.Error())
+	}
 
 	t.Run("QueryOneParameterized", func(t *testing.T) {
 		qr, err = globalConnection.QueryOneParameterized(
@@ -293,9 +329,11 @@ func TestQueryOneParameterized(t *testing.T) {
 		if err != nil {
 			t.Errorf("map: %s", err.Error())
 		}
+
 		if r["name"].(string) != "Ferengi" {
 			t.Errorf("expected 'Ferengi', got %s", r["name"].(string))
 		}
+
 		if ts, ok := r["ts"]; ok {
 			if tss, ok := ts.(time.Time); ok {
 				// time should not be zero because it defaults to current utc time
@@ -345,17 +383,25 @@ func TestQueryOneParameterized(t *testing.T) {
 		}
 	})
 
-	t.Logf("trying WriteOne DELETE FROM")
-	_, err = globalConnection.WriteOne("DELETE FROM " + testTableName() + "")
-	if err != nil {
-		t.Logf("--> FAILED (%s)", err.Error())
-		t.Fail()
-	}
 }
 
 func TestScanNullableTypes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id integer, nullstring text, nullint64 integer, nullint32 integer, nullint16 integer, nullfloat64 real, nullbool integer, nulltime integer) strict")
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		wr, err := globalConnection.WriteOne("DROP TABLE " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
+
 	var qr gorqlite.QueryResult
-	var err error
 
 	// When the Federation met the Cardassians
 	meeting := time.Date(2424, 1, 2, 17, 0, 0, 0, time.UTC)
@@ -363,15 +409,15 @@ func TestScanNullableTypes(t *testing.T) {
 
 	t.Logf("trying Write INSERT")
 	s := make([]string, 0)
-	s = append(s, "INSERT INTO "+testTableName()+"_nullable (id) VALUES (1)") // other values are gonna be null
-	s = append(s, "INSERT INTO "+testTableName()+"_nullable (id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime) VALUES (2, 'Romulan', 1, 2, 3, 4.5, 1, "+met+")")
+	s = append(s, "INSERT INTO "+testTableName()+" (id) VALUES (1)") // other values are gonna be null
+	s = append(s, "INSERT INTO "+testTableName()+" (id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime) VALUES (2, 'Romulan', 1, 2, 3, 4.5, 1, "+met+")")
 	_, err = globalConnection.Write(s)
 	if err != nil {
 		t.Errorf("insert queries: %s", err.Error())
 	}
 
 	t.Logf("trying QueryOne")
-	qr, err = globalConnection.QueryOne("SELECT id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime FROM " + testTableName() + "_nullable WHERE id IN (1, 2)")
+	qr, err = globalConnection.QueryOne("SELECT id, nullstring, nullint64, nullint32, nullint16, nullfloat64, nullbool, nulltime FROM " + testTableName() + " WHERE id IN (1, 2)")
 	if err != nil {
 		t.Errorf("query one: %s", err.Error())
 	}
@@ -457,11 +503,5 @@ func TestScanNullableTypes(t *testing.T) {
 	}
 	if !nullTime.Valid || !nullTime.Time.Equal(meeting) {
 		t.Errorf("nullTime should be valid and set to '%v' but it's '%v'", meeting, nullTime.Time)
-	}
-
-	t.Logf("trying WriteOne DELETE FROM")
-	_, err = globalConnection.WriteOne("DELETE FROM " + testTableName() + "_nullable")
-	if err != nil {
-		t.Errorf("delete from: %s", err.Error())
 	}
 }

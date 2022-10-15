@@ -133,7 +133,7 @@ type NullTime struct {
 
  * *****************************************************************/
 
-// QueryOne is a convenience method that wraps Query into a single-statement method.
+// QueryOne wraps Query into a single-statement method.
 //
 // QueryOne uses context.Background() internally; to specify the context, use QueryOneContext.
 func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
@@ -144,7 +144,7 @@ func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error
 	return qra[0], err
 }
 
-// QueryOneContext is a convenience method that wraps Query into a single-statement method.
+// QueryOneContext wraps Query into a single-statement method.
 func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string) (qr QueryResult, err error) {
 	sqlStatements := make([]string, 0)
 	sqlStatements = append(sqlStatements, sqlStatement)
@@ -153,22 +153,23 @@ func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string
 	return qra[0], err
 }
 
-// QueryOneParameterized is a convenience method that wraps QueryParameterized into a single-statement method.
+// QueryOneParameterized wraps QueryParameterized into a single-statement method.
 //
-// QueryOneParameterized uses context.Background() internally; to specify the context, use QueryOneParameterizedContext.
+// QueryOneParameterized uses context.Background() internally;
+// to specify the context, use QueryOneParameterizedContext.
 func (conn *Connection) QueryOneParameterized(statement ParameterizedStatement) (qr QueryResult, err error) {
 	qra, err := conn.QueryParameterized([]ParameterizedStatement{statement})
 	return qra[0], err
 }
 
-// QueryOneParameterizedContext is a convenience method that wraps QueryParameterizedContext into a single-statement method.
+// QueryOneParameterizedContext wraps QueryParameterizedContext into a single-statement method.
 func (conn *Connection) QueryOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (qr QueryResult, err error) {
 	qra, err := conn.QueryParameterizedContext(ctx, []ParameterizedStatement{statement})
 	return qra[0], err
 }
 
 // Query is used to perform SELECT operations in the database. It takes an array of SQL statements and
-// executes them in a single transaction, returning an array of QueryResult vars.
+// executes them in a single transaction, returning an array of QueryResult.
 //
 // Query uses context.Background() internally; to specify the context, use QueryContext.
 func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, err error) {
@@ -176,7 +177,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 }
 
 // QueryContext is used to perform SELECT operations in the database. It takes an array of SQL statements and
-// executes them in a single transaction, returning an array of QueryResult vars.
+// executes them in a single transaction, returning an array of QueryResult.
 func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string) (results []QueryResult, err error) {
 	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
 	for _, sqlStatement := range sqlStatements {
@@ -292,9 +293,9 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 
 	if numStatementErrors > 0 {
 		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
-	} else {
-		return results, nil
 	}
+
+	return results, nil
 }
 
 /* *****************************************************************
@@ -303,7 +304,7 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 
  * *****************************************************************/
 
-// A QueryResult type holds the results of a call to Query().  You could think of it as a rowset.
+// QueryResult holds the results of a call to Query().  You could think of it as a rowset.
 //
 // So if you were to query:
 //
@@ -545,6 +546,11 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
 			}
 		case *bool:
+			// Note: Rqlite does not support bool, but this is a loop from dest
+			// meaning, the user might be targeting to a bool-type variable.
+			// Per Go convention, and per strconv.ParseBool documentation, bool might be
+			// coming from value of "1", "t", "T", "TRUE", "true", "True", for `true` and
+			// "0", "f", "F", "FALSE", "false", "False" for `false`
 			switch src := src.(type) {
 			case float64:
 				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
@@ -569,14 +575,14 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			default:
 				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
 			}
-		case *[]uint8:
+		case *[]byte:
 			switch src := src.(type) {
 			case []byte:
 				*d = src
 			case string:
 				*d = []uint8(src)
 			default:
-				return fmt.Errorf("invalid []uint8 col:%d type:%T val:%v", n, src, src)
+				return fmt.Errorf("invalid []byte col:%d type:%T val:%v", n, src, src)
 			}
 		case *NullString:
 			switch src := src.(type) {

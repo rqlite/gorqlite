@@ -99,6 +99,8 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	return nil, errors.New(builder.String())
 }
 
+// redactURL redacts URL from the given parameter to be
+// safely read by the client
 func redactURL(url string) string {
 	u, err := nurl.Parse(url)
 	if err != nil {

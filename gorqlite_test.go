@@ -20,27 +20,14 @@ func TestMain(m *testing.M) {
 		log.Fatalf("opening connection: %v", err)
 	}
 
-	_, err = conn.Write([]string{
-		`CREATE TABLE IF NOT EXISTS ` + testTableName() + ` (id integer, name text)`,
-		`CREATE TABLE IF NOT EXISTS ` + testTableName() + `_full (id integer, name text, wallet real, bankrupt boolean, payload blob, ts DATETIME)`,
-		`CREATE TABLE IF NOT EXISTS ` + testTableName() + `_nullable (id integer, nullstring text, nullint64 integer, nullint32 integer, nullint16 integer, nullfloat64 real, nullbool integer, nulltime integer) strict`,
-	})
+	err = conn.SetConsistencyLevel(gorqlite.ConsistencyLevelStrong)
 	if err != nil {
-		log.Fatalf("creating table: %v", err)
+		log.Fatalf("setting consistency level: %v", err)
 	}
 
 	globalConnection = conn
 
 	exitCode := m.Run()
-
-	_, err = conn.Write([]string{
-		`DROP TABLE IF EXISTS ` + testTableName(),
-		`DROP TABLE IF EXISTS ` + testTableName() + `_full`,
-		`DROP TABLE IF EXISTS ` + testTableName() + `_nullable`,
-	})
-	if err != nil {
-		log.Fatalf("deleting table: %v", err)
-	}
 
 	conn.Close()
 

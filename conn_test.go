@@ -31,6 +31,15 @@ func TestSetConsistencyLevel(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected nil, got %v", err)
 		}
+
+		currentLevel, err := conn.ConsistencyLevel()
+		if err != nil {
+			t.Errorf("unexpected error: %s", err.Error())
+		}
+
+		if currentLevel != "none" {
+			t.Errorf("expected currentLevel to be 'none', instead got %s", currentLevel)
+		}
 	})
 
 	conn.Close()

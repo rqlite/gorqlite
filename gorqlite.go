@@ -3,7 +3,7 @@
 //
 // Copyright (c)2016 andrew fabbro (andrew@fabbro.org)
 //
-// See LICENSE.md for license. tl;dr: MIT. Conveniently, the same licese as rqlite.
+// See LICENSE.md for license. tl;dr: MIT. Conveniently, the same license as rqlite.
 //
 // Project home page: https://github.com/raindo308/gorqlite
 //
@@ -25,8 +25,13 @@ import (
 type consistencyLevel int
 
 const (
+	// ConsistencyLevelNone provides no consistency to other nodes.
 	ConsistencyLevelNone consistencyLevel = iota
+	// ConsistencyLevelWeak provides a weak consistency that guarantees the
+	// queries are sent to the leader.
 	ConsistencyLevelWeak
+	// ConsistencyLevelStrong provides a strong consistency and guarantees
+	// that queries are sent and received by other nodes.
 	ConsistencyLevelStrong
 )
 

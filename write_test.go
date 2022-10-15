@@ -10,6 +10,21 @@ import (
 )
 
 func TestWriteOne(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT)")
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		wr, err := globalConnection.WriteOne("DROP TABLE " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
+
 	t.Run("WriteOne CREATE", func(t *testing.T) {
 		tableName := RandStringBytes(8)
 
@@ -29,6 +44,8 @@ func TestWriteOne(t *testing.T) {
 	})
 
 	t.Run("WriteOne DROP", func(t *testing.T) {
+		// This is safe as the table was not found
+		// (the keyword we're executing contains IF EXISTS clause)
 		tableName := RandStringBytes(8)
 
 		wr, err := globalConnection.WriteOne("DROP TABLE IF EXISTS " + tableName)
@@ -65,6 +82,13 @@ func TestWriteOne(t *testing.T) {
 }
 
 func TestQueueOne(t *testing.T) {
+	t.Cleanup(func() {
+		r, err := globalConnection.WriteOne("DROP TABLE IF EXISTS " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), r.Err.Error())
+		}
+	})
+
 	t.Run("QueueOne DROP", func(t *testing.T) {
 		tableName := RandStringBytes(8)
 		seq, err := globalConnection.QueueOne("DROP TABLE IF EXISTS " + tableName)
@@ -78,6 +102,11 @@ func TestQueueOne(t *testing.T) {
 		seq, err := globalConnection.QueueOne("CREATE TABLE " + tableName + " (id integer, name text)")
 		if err != nil {
 			t.Errorf("failed during table creation: %v - %v", err.Error(), seq)
+		}
+
+		seq, err = globalConnection.QueueOne("DROP TABLE IF EXISTS " + tableName)
+		if err != nil {
+			t.Errorf("failed during table deletion: %s - %d", err.Error(), seq)
 		}
 	})
 
@@ -94,8 +123,23 @@ func TestQueueOne(t *testing.T) {
 }
 
 func TestQueueOneContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
+
+	wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT)")
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+
+		wr, err := globalConnection.WriteOneContext(ctx, "DROP TABLE "+testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
 
 	seq, err := globalConnection.QueueOneContext(ctx, fmt.Sprintf("INSERT INTO "+testTableName()+" (id, name) VALUES ( %d, %s )", 120, "aaa bbb ccc"))
 	if err != nil {
@@ -104,12 +148,26 @@ func TestQueueOneContext(t *testing.T) {
 }
 
 func TestWriteOneParameterized(t *testing.T) {
-	var wr gorqlite.WriteResult
-	var err error
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT)")
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+
+		wr, err := globalConnection.WriteOneContext(ctx, "DROP TABLE "+testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
 
 	t.Run("CTHULHU (should fail, bad SQL)", func(t *testing.T) {
-
-		wr, err = globalConnection.WriteOneParameterized(
+		_, err := globalConnection.WriteOneParameterized(
 			gorqlite.ParameterizedStatement{
 				Query: "CTHULHU",
 			},
@@ -120,7 +178,7 @@ func TestWriteOneParameterized(t *testing.T) {
 	})
 
 	t.Run("CREATE", func(t *testing.T) {
-		wr, err = globalConnection.WriteOneParameterized(
+		_, err := globalConnection.WriteOneParameterized(
 			gorqlite.ParameterizedStatement{
 				Query: fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id integer, name text)", testTableName()),
 			},
@@ -131,7 +189,7 @@ func TestWriteOneParameterized(t *testing.T) {
 	})
 
 	t.Run("INSERT", func(t *testing.T) {
-		wr, err = globalConnection.WriteOneParameterized(
+		wr, err := globalConnection.WriteOneParameterized(
 			gorqlite.ParameterizedStatement{
 				Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
 			},
@@ -147,10 +205,7 @@ func TestWriteOneParameterized(t *testing.T) {
 }
 
 func TestQueueOneParameterized(t *testing.T) {
-	var seq int64
-	var err error
-
-	_, err = globalConnection.QueueOneParameterized(
+	_, err := globalConnection.QueueOneParameterized(
 		gorqlite.ParameterizedStatement{
 			Query: fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (id integer, name text)", testTableName()),
 		},
@@ -159,8 +214,19 @@ func TestQueueOneParameterized(t *testing.T) {
 		t.Errorf("failed during table creation: %s", err.Error())
 	}
 
+	t.Cleanup(func() {
+		_, err := globalConnection.QueueOneParameterized(
+			gorqlite.ParameterizedStatement{
+				Query: fmt.Sprintf("DROP TABLE %s", testTableName()),
+			},
+		)
+		if err != nil {
+			t.Errorf("failed during dropping table: %s", err.Error())
+		}
+	})
+
 	t.Run("QueryOneParameterized INSERT", func(t *testing.T) {
-		seq, err = globalConnection.QueueOneParameterized(gorqlite.ParameterizedStatement{
+		seq, err := globalConnection.QueueOneParameterized(gorqlite.ParameterizedStatement{
 			Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
 		})
 		if err != nil {
@@ -173,11 +239,19 @@ func TestQueueOneParameterized(t *testing.T) {
 }
 
 func TestWrite(t *testing.T) {
+
+	t.Cleanup(func() {
+		wr, err := globalConnection.WriteOne("DROP TABLE IF EXISTS " + testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
+
 	t.Run("Write DROP & CREATE", func(t *testing.T) {
 		tableName := RandStringBytes(8)
 		s := make([]string, 0)
-		s = append(s, "DROP TABLE IF EXISTS "+tableName)
 		s = append(s, "CREATE TABLE "+tableName+" (id integer, name text)")
+		s = append(s, "DROP TABLE IF EXISTS "+tableName)
 		results, err := globalConnection.Write(s)
 		if err != nil {
 			t.Errorf("failed during table creation: %v - %v", err.Error(), results[0].Err.Error())
@@ -185,6 +259,14 @@ func TestWrite(t *testing.T) {
 	})
 
 	t.Run("Write INSERT", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+
+		wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT)")
+		if err != nil {
+			t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+		}
+
 		s := make([]string, 0)
 		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 21, 'aaa bbb ccc' )")
 		s = append(s, "INSERT INTO "+testTableName()+" (id, name) VALUES ( 22, 'ddd eee fff' )")
@@ -206,15 +288,33 @@ func TestWrite(t *testing.T) {
 }
 
 func TestWriteParameterized(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	wr, err := globalConnection.WriteOneContext(ctx, "CREATE TABLE "+testTableName()+" (id INTEGER, name TEXT)")
+	if err != nil {
+		t.Fatalf("creating table: %s - %s", err.Error(), wr.Err.Error())
+	}
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+
+		wr, err := globalConnection.WriteOneContext(ctx, "DROP TABLE "+testTableName())
+		if err != nil {
+			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
+		}
+	})
+
 	t.Run("DROP", func(t *testing.T) {
 		tableName := RandStringBytes(8)
 		_, err := globalConnection.WriteParameterized(
 			[]gorqlite.ParameterizedStatement{
 				{
-					Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName),
+					Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", tableName),
 				},
 				{
-					Query: fmt.Sprintf("CREATE TABLE %s (id integer, name text)", tableName),
+					Query: fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName),
 				},
 			},
 		)

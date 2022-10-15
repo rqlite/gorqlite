@@ -49,7 +49,7 @@ import (
 
  * *****************************************************************/
 
-// WriteOne is a convenience method that wraps Write() into a single-statement
+// WriteOne wraps Write() into a single-statement
 // method.
 //
 // WriteOne uses context.Background() internally; to specify the context, use WriteOneContext.
@@ -58,13 +58,13 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 	return wra[0], err
 }
 
-// WriteOneContext is a convenience method that wraps WriteContext() into a single-statement
+// WriteOneContext wraps WriteContext() into a single-statement
 func (conn *Connection) WriteOneContext(ctx context.Context, sqlStatement string) (wr WriteResult, err error) {
 	wra, err := conn.WriteContext(ctx, []string{sqlStatement})
 	return wra[0], err
 }
 
-// WriteOneParameterized is a convenience method that wraps WriteParameterized() into a single-statement method.
+// WriteOneParameterized wraps WriteParameterized() into a single-statement method.
 //
 // WriteOneParameterized uses context.Background() internally; to specify the context, use WriteOneParameterizedContext.
 func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) (wr WriteResult, err error) {
@@ -72,7 +72,7 @@ func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) 
 	return wra[0], err
 }
 
-// WriteOneParameterizedContext is a convenience method that wraps WriteParameterizedContext into
+// WriteOneParameterizedContext wraps WriteParameterizedContext into
 // a single-statement method.
 func (conn *Connection) WriteOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (wr WriteResult, err error) {
 	wra, err := conn.WriteParameterizedContext(ctx, []ParameterizedStatement{statement})
