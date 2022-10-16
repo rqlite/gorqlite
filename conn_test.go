@@ -3,7 +3,7 @@ package gorqlite_test
 import (
 	"testing"
 
-	"github.com/rqlite/gorqlite/v2"
+	"github.com/rqlite/gorqlite"
 )
 
 func TestSetConsistencyLevel(t *testing.T) {

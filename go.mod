@@ -1,3 +1,3 @@
-module github.com/rqlite/gorqlite/v2
+module github.com/rqlite/gorqlite
 
 go 1.17

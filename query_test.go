@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rqlite/gorqlite/v2"
+	"github.com/rqlite/gorqlite"
 )
 
 func TestQueryOne(t *testing.T) {
