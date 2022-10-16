@@ -580,7 +580,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			case []byte:
 				*d = src
 			case string:
-				*d = []uint8(src)
+				*d = []byte(src)
 			default:
 				return fmt.Errorf("invalid []byte col:%d type:%T val:%v", n, src, src)
 			}
