@@ -232,7 +232,7 @@ func (conn *Connection) updateClusterInfo() error {
 		trace("leader successfully determined using metadata")
 	}
 
-	rc.peerList = make([]peer, len(rc.otherPeers)+1)
+	rc.peerList = []peer{}
 	if rc.leader != "" {
 		rc.peerList = append(rc.peerList, rc.leader)
 	}
