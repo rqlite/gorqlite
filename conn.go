@@ -22,7 +22,10 @@ import (
 	nurl "net/url"
 )
 
-const defaultTimeout = 10
+const (
+	defaultTimeout                 = 10
+	defaultDisableClusterDiscovery = false
+)
 
 var (
 	errClosed = errors.New("gorqlite: connection is closed")
@@ -64,12 +67,13 @@ type Connection struct {
 	  name               type                default
 	*/
 
-	username          string           //   username or ""
-	password          string           //   username or ""
-	consistencyLevel  consistencyLevel //   WEAK
-	wantsHTTPS        bool             //   false unless connection URL is https
-	wantsTransactions bool             //   true unless user states otherwise
-	wantsQueueing     bool             //   perform queued writes
+	username                string           //   username or ""
+	password                string           //   username or ""
+	consistencyLevel        consistencyLevel //   WEAK
+	disableClusterDiscovery bool             //   false unless user states otherwise
+	wantsHTTPS              bool             //   false unless connection URL is https
+	wantsTransactions       bool             //   true unless user states otherwise
+	wantsQueueing           bool             //   perform queued writes
 
 	// variables below this line need to be initialized in Open()
 
@@ -113,6 +117,9 @@ func (conn *Connection) Leader() (string, error) {
 	if conn.hasBeenClosed {
 		return "", errClosed
 	}
+	if conn.disableClusterDiscovery {
+		return string(conn.cluster.leader), nil
+	}
 	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
 	if err != nil {
@@ -136,6 +143,13 @@ func (conn *Connection) Peers() ([]string, error) {
 		return ans, errClosed
 	}
 	plist := make([]string, 0)
+
+	if conn.disableClusterDiscovery {
+		for _, p := range conn.cluster.peerList {
+			plist = append(plist, string(p))
+		}
+		return plist, nil
+	}
 
 	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
@@ -169,7 +183,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
 		conn.consistencyLevel = consistencyLevels[levelDesired]
 		return nil
 	}
-	return errors.New(fmt.Sprintf("unknown consistency level: %s", levelDesired))
+	return fmt.Errorf("unknown consistency level: %s", levelDesired)
 }
 
 func (conn *Connection) SetExecutionWithTransaction(state bool) error {
@@ -189,7 +203,7 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 /*
 	initConnection takes the initial connection URL specified by
 	the user, and parses it into a peer.  This peer is assumed to
-	be the leader.  The next thing Open() does is updateClusterInfo()
+	be the leader.  The next thing Open() does by default is updateClusterInfo()
 	so the truth will be revealed soon enough.
 
 	initConnection() does not talk to rqlite.  It only parses the
@@ -228,7 +242,7 @@ func (conn *Connection) initConnection(url string) error {
 		return errors.New("url specified is impossibly short")
 	}
 
-	if strings.HasPrefix(url, "http") == false {
+	if !strings.HasPrefix(url, "http") {
 		return errors.New("url does not start with 'http'")
 	}
 
@@ -287,6 +301,15 @@ func (conn *Connection) initConnection(url string) error {
 		conn.consistencyLevel = cl
 	}
 
+	conn.disableClusterDiscovery = defaultDisableClusterDiscovery
+	if query.Get("disableClusterDiscovery") != "" {
+		dpd, err := strconv.ParseBool(query.Get("disableClusterDiscovery"))
+		if err != nil {
+			return errors.New("invalid disableClusterDiscovery value: " + err.Error())
+		}
+		conn.disableClusterDiscovery = dpd
+	}
+
 	timeout := defaultTimeout
 	if query.Get("timeout") != "" {
 		customTimeout, err := strconv.Atoi(query.Get("timeout"))
@@ -305,7 +328,7 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
-	if conn.wantsHTTPS == true {
+	if conn.wantsHTTPS {
 		trace("%s:    %s -> %s", conn.ID, "wants https?", "yes")
 	} else {
 		trace("%s:    %s -> %s", conn.ID, "wants https?", "no")

@@ -19,6 +19,7 @@ gorqlite should be considered alpha until more testers share their experiences. 
 * Timeout can be set on a per-Connection basis to accommodate those with far-flung empires.
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
 * Only a single node needs to be specified in the connection.  gorqlite will talk to it and figure out the rest of the cluster from its redirects and status API.
+* When cluster discovery is disabled, only the provided URL will be used to communicate with the API instead of discovering the leader and peers and retrying failed requests with different peers. This is helpful when using a Kubernetes service to handle the load balancing of the requests across healthy nodes.
 * Support for several rqlite-specific operations:
   * `Leader()` and `Peers()` to examine the cluster.
   * `SetConsistencyLevel()` can be called at any time on a connection to change the consistency level for future operations.
@@ -52,15 +53,13 @@ conn, err := gorqlite.Open("https://mary:secret2@server1.example.com:4001/?level
 conn, err := gorliqte.Open("https://server2.example.com:4001/?level=weak")
 // different port, setting the rqlite consistency level and timeout
 conn, err := gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
+// different port, disabling cluster discovery in the client
+conn, err := gorqlite.Open("https://localhost:2265/?disableClusterDiscovery=true")
 
 // change our minds
 conn.SetConsistencyLevel("none")
 conn.SetConsistencyLevel("weak")
 conn.SetConsistencyLevel("strong")
-
-// set the http timeout.  Note that rqlite has various internal timeouts, but this
-// timeout applies to the http.Client and its work.  It is measured in seconds.
-conn.SetTimeout(10)
 
 // simulate database/sql Prepare()
 statements := make ([]string,0)
