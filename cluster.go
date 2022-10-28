@@ -85,7 +85,7 @@ func (rc *rqliteCluster) PeerList() []peer {
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	var builder strings.Builder
 
-	if conn.wantsHTTPS == true {
+	if conn.wantsHTTPS {
 		builder.WriteString("https")
 	} else {
 		builder.WriteString("http")

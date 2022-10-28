@@ -209,6 +209,15 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 		return results, err
 	}
 
+	// if we got an error from the api, that's a showstopper
+	if errMsg, ok := sections["error"].(string); ok && errMsg != "" {
+		trace("%s: api ERROR: %s", conn.ID, errMsg)
+		var errResult QueryResult
+		errResult.Err = fmt.Errorf("%s", errMsg)
+		results = append(results, errResult)
+		return results, errResult.Err
+	}
+
 	/*
 		at this point, we have a "results" section and
 		a "time" section.  we can ignore the latter.
@@ -266,7 +275,7 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
 	if numStatementErrors > 0 {
-		return results, errors.New(fmt.Sprintf("there were %d statement errors", numStatementErrors))
+		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
 	} else {
 		return results, nil
 	}
@@ -283,7 +292,7 @@ A QueryResult type holds the results of a call to Query().  You could think of i
 
 So if you were to query:
 
-  SELECT id, name FROM some_table;
+	SELECT id, name FROM some_table;
 
 then a QueryResult would hold any errors from that query, a list of columns and types, and the actual row values.
 
@@ -440,6 +449,7 @@ Scan() takes a list of pointers and then updates them to reflect he current row'
 
 Note that only the following data types are used, and they
 are a subset of the types JSON uses:
+
 	string, for JSON strings
 	float64, for JSON numbers
 	int64, as a convenient extension
