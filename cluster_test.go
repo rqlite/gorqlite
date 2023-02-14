@@ -1,38 +1,27 @@
-package gorqlite
+package gorqlite_test
 
 import (
-	"os"
 	"testing"
 )
 
-func TestInitCluster(t *testing.T) {
-	TraceOn(os.Stderr)
-	t.Logf("trying Open: %s\n", testUrl())
-	conn, err := Open(testUrl())
+func TestLeader(t *testing.T) {
+	leaders, err := globalConnection.Leader()
 	if err != nil {
-		t.Logf("--> FAILED")
-		t.Fatal(err)
+		t.Errorf("failed to get leader: %v", err.Error())
 	}
 
-	l, err := conn.Leader()
+	if len(leaders) < 1 {
+		t.Errorf("expected leaders to be at least 1, got %d", len(leaders))
+	}
+}
+
+func TestPeers(t *testing.T) {
+	peers, err := globalConnection.Peers()
 	if err != nil {
-		t.Logf("--> FAILED")
-		t.Fail()
+		t.Errorf("failed to get peers: %v", err.Error())
 	}
 
-	if len(l) < 1 {
-		t.Logf("--> FAILED")
-		t.Fail()
-	}
-
-	p, err := conn.Peers()
-	if err != nil {
-		t.Logf("--> FAILED")
-		t.Fail()
-	}
-
-	if len(p) < 1 {
-		t.Logf("--> FAILED")
-		t.Fail()
+	if len(peers) < 1 {
+		t.Errorf("expected peers to be at least 1, got %d", len(peers))
 	}
 }

@@ -18,31 +18,18 @@ package gorqlite
  * *****************************************************************/
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/url"
 	"strings"
 )
 
-/* *****************************************************************
-
-	type: peer
-
-	this is an internal type to abstract peer info, actually just
-	represent a single hostname:port
-
- * *****************************************************************/
-
+// this is an internal type to abstract peer info, actually just
+// represent a single hostname:port
 type peer string
 
-/* *****************************************************************
-
-  type: rqliteCluster
-
-	internal type that abstracts the full cluster state (leader, peers)
-
- * *****************************************************************/
-
+// internal type that abstracts the full cluster state (leader, peers)
 type rqliteCluster struct {
 	leader     peer
 	otherPeers []peer
@@ -51,37 +38,25 @@ type rqliteCluster struct {
 	conn     *Connection
 }
 
-/* *****************************************************************
-
-  method: rqliteCluster.PeerList()
-
-	in the api calls, we'll want to try the leader first, then the other
-	peers.  to make looping easy, this function returns a list of peers
-	in the order the try them: leader, other peer, other peer, etc.
-	since the peer list might change only during updateClusterInfo(),
-	we keep it cached
-
- * *****************************************************************/
-
+// PeerList lists the peers within a rqlite cluster.
+//
+// In the api calls, we'll want to try the leader first, then the other
+// peers. To make looping easy, this function returns a list of peers
+// in the order the try them: leader, other peer, other peer, etc.
+// Since the peer list might change only during updateClusterInfo(),
+// we keep it cached
 func (rc *rqliteCluster) PeerList() []peer {
 	return rc.peerList
 }
 
-/* *****************************************************************
-
-	method: Connection.assembleURL()
-
-	tell it what peer to talk to and what kind of API operation you're
-	making, and it will return the full URL, from start to finish.
-	e.g.:
-
-	https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
-
-	note: this func needs to live at the Connection level because the
-	Connection holds the username, password, consistencyLevel, etc.
-
- * *****************************************************************/
-
+// tell it what peer to talk to and what kind of API operation you're
+// making, and it will return the full URL, from start to finish.
+// e.g.:
+//
+// https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
+//
+// note: this func needs to live at the Connection level because the
+// Connection holds the username, password, consistencyLevel, etc.
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	var builder strings.Builder
 
@@ -135,18 +110,11 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	return builder.String()
 }
 
-/* *****************************************************************
-
-	method: Connection.updateClusterInfo()
-
-	upon invocation, updateClusterInfo() completely erases and refreshes
-	the Connection's cluster info, replacing its rqliteCluster object
-	with current info.
-
-	the web heavy lifting (retrying, etc.) is done in rqliteApiGet()
-
- * *****************************************************************/
-
+// Upon invocation, updateClusterInfo() completely erases and refreshes
+// the Connection's cluster info, replacing its rqliteCluster object
+// with current info.
+//
+// The web heavy lifting (retrying, etc.) is done in rqliteApiGet()
 func (conn *Connection) updateClusterInfo() error {
 	trace("%s: updateClusterInfo() called", conn.ID)
 
@@ -154,7 +122,7 @@ func (conn *Connection) updateClusterInfo() error {
 	var rc rqliteCluster
 	rc.conn = conn
 
-	responseBody, err := conn.rqliteApiGet(api_STATUS)
+	responseBody, err := conn.rqliteApiGet(context.Background(), api_STATUS)
 	if err != nil {
 		return err
 	}
@@ -195,7 +163,7 @@ func (conn *Connection) updateClusterInfo() error {
 	if rc.leader == "" {
 		// nodes/ API is available in 6.0+
 		trace("getting leader from metadata failed, trying nodes/")
-		responseBody, err := conn.rqliteApiGet(api_NODES)
+		responseBody, err := conn.rqliteApiGet(context.Background(), api_NODES)
 		if err != nil {
 			return errors.New("could not determine leader from API nodes call")
 		}
@@ -236,9 +204,8 @@ func (conn *Connection) updateClusterInfo() error {
 	if rc.leader != "" {
 		rc.peerList = append(rc.peerList, rc.leader)
 	}
-	for _, p := range rc.otherPeers {
-		rc.peerList = append(rc.peerList, p)
-	}
+
+	rc.peerList = append(rc.peerList, rc.otherPeers...)
 
 	// dump to trace
 	trace("%s: here is my cluster config:", conn.ID)

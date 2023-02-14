@@ -28,14 +28,14 @@ const (
 )
 
 var (
-	errClosed = errors.New("gorqlite: connection is closed")
+	// ErrClosed indicates that client connection was closed
+	ErrClosed = errors.New("gorqlite: connection is closed")
 	traceOut  io.Writer
 )
 
 // defaults to false.  This is used in trace() to quickly
 // return if tracing is off, so that we don't do a perhaps
 // expensive Sprintf() call only to send it to Discard
-
 var wantsTrace bool
 
 /* *****************************************************************
@@ -44,28 +44,23 @@ var wantsTrace bool
 
  * *****************************************************************/
 
-/*
-	The connection abstraction.	 Note that since rqlite is stateless,
-	there really is no "connection".  However, this type holds
-	information such as the current leader, peers, connection
-	string to build URLs, etc.
-
-	Connections are assigned a "connection ID" which is a pseudo-UUID
-	for connection identification in trace output only.  This helps
-	sort out what's going on if you have multiple connections going
-	at once.  It's generated using a non-standards-or-anything-else-compliant
-	function that uses crypto/rand to generate 16 random bytes.
-
-	Note that the Connection objection holds info on all peers, gathered
-	at time of Open() from the node specified.
-*/
-
+// Connection provides the connection abstraction.
+// Note that since rqlite is stateless, there really is no "connection".
+// However, this type holds  information such as the current leader, peers,
+// connection string to build URLs, etc.
+//
+// Connections are assigned a "connection ID" which is a pseudo-UUID
+// for connection identification in trace output only.  This helps
+// sort out what's going on if you have multiple connections going
+// at once.  It's generated using a non-standards-or-anything-else-compliant
+// function that uses crypto/rand to generate 16 random bytes.
+//
+// Note that the Connection objection holds info on all peers, gathered
+// at time of Open() from the node specified.
 type Connection struct {
 	cluster rqliteCluster
 
-	/*
-	  name               type                default
-	*/
+	// name           type                default
 
 	username                string           //   username or ""
 	password                string           //   username or ""
@@ -83,39 +78,25 @@ type Connection struct {
 	client http.Client
 }
 
-/* *****************************************************************
-
-   method: Connection.Close()
-
- * *****************************************************************/
-
+// Close will mark the connection as closed. It is safe to be called
+// multiple times.
 func (conn *Connection) Close() {
 	conn.hasBeenClosed = true
 	trace("%s: %s", conn.ID, "closing connection")
 }
 
-/* *****************************************************************
-
-   method: Connection.ConsistencyLevel()
-
- * *****************************************************************/
-
+// ConsistencyLevel tells the current consistency level
 func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.hasBeenClosed {
-		return "", errClosed
+		return "", ErrClosed
 	}
 	return consistencyLevelNames[conn.consistencyLevel], nil
 }
 
-/* *****************************************************************
-
-   method: Connection.Leader()
-
- * *****************************************************************/
-
+// Leader tells the current leader of the cluster
 func (conn *Connection) Leader() (string, error) {
 	if conn.hasBeenClosed {
-		return "", errClosed
+		return "", ErrClosed
 	}
 	if conn.disableClusterDiscovery {
 		return string(conn.cluster.leader), nil
@@ -131,16 +112,11 @@ func (conn *Connection) Leader() (string, error) {
 	return string(conn.cluster.leader), nil
 }
 
-/* *****************************************************************
-
-   method: Connection.Peers()
-
- * *****************************************************************/
-
+// Peers tells the current peers of the cluster
 func (conn *Connection) Peers() ([]string, error) {
 	if conn.hasBeenClosed {
 		var ans []string
-		return ans, errClosed
+		return ans, ErrClosed
 	}
 	plist := make([]string, 0)
 
@@ -168,73 +144,60 @@ func (conn *Connection) Peers() ([]string, error) {
 	return plist, nil
 }
 
-/* *****************************************************************
-
-   method: Connection.SetConsistencyLevel()
-
- * *****************************************************************/
-
-func (conn *Connection) SetConsistencyLevel(levelDesired string) error {
+func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error {
 	if conn.hasBeenClosed {
-		return errClosed
+		return ErrClosed
 	}
-	_, ok := consistencyLevels[levelDesired]
-	if ok {
-		conn.consistencyLevel = consistencyLevels[levelDesired]
-		return nil
+
+	if levelDesired < ConsistencyLevelNone || levelDesired > ConsistencyLevelStrong {
+		return fmt.Errorf("unknown consistency level: %d", levelDesired)
 	}
-	return fmt.Errorf("unknown consistency level: %s", levelDesired)
+
+	conn.consistencyLevel = levelDesired
+	return nil
 }
 
 func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 	if conn.hasBeenClosed {
-		return errClosed
+		return ErrClosed
 	}
 	conn.wantsTransactions = state
 	return nil
 }
 
-/* *****************************************************************
-
-   method: Connection.initConnection()
-
- * *****************************************************************/
-
-/*
-	initConnection takes the initial connection URL specified by
-	the user, and parses it into a peer.  This peer is assumed to
-	be the leader.  The next thing Open() does by default is updateClusterInfo()
-	so the truth will be revealed soon enough.
-
-	initConnection() does not talk to rqlite.  It only parses the
-	connection URL and prepares the new connection for work.
-
-	URL format:
-
-		http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
-
-	Examples:
-
-		https://mary:secret2@localhost:4001/db
-		https://mary:secret2@server1.example.com:4001/db?level=none
-		https://mary:secret2@server2.example.com:4001/db?level=weak
-		https://mary:secret2@localhost:2265/db?level=strong
-
-	to use default connection to localhost:4001 with no auth:
-		http://
-		https://
-
-	guaranteed map fields - will be set to "" if not specified
-
-		field name                  default if not specified
-
-		username                    ""
-		password                    ""
-		hostname                    "localhost"
-		port                        "4001"
-		consistencyLevel            "weak"
-*/
-
+// initConnection takes the initial connection URL specified by
+// the user, and parses it into a peer.  This peer is assumed to
+// be the leader.  The next thing Open() does is updateClusterInfo()
+// so the truth will be revealed soon enough.
+//
+// initConnection() does not talk to rqlite.  It only parses the
+// connection URL and prepares the new connection for work.
+//
+// URL format:
+//
+//	http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
+//
+// Examples:
+//
+//	https://mary:secret2@localhost:4001/db
+//	https://mary:secret2@server1.example.com:4001/db?level=none
+//	https://mary:secret2@server2.example.com:4001/db?level=weak
+//	https://mary:secret2@localhost:2265/db?level=strong
+//
+// to use default connection to localhost:4001 with no auth:
+//
+//	http://
+//	https://
+//
+// guaranteed map fields - will be set to "" if not specified
+//
+//	field name                  default if not specified
+//
+//	username                    ""
+//	password                    ""
+//	hostname                    "localhost"
+//	port                        "4001"
+//	consistencyLevel            "weak"
 func (conn *Connection) initConnection(url string) error {
 	// do some sanity checks.  You know users.
 
@@ -257,7 +220,6 @@ func (conn *Connection) initConnection(url string) error {
 	}
 
 	// specs say Username() is always populated even if empty
-
 	if u.User == nil {
 		conn.username = ""
 		conn.password = ""
@@ -281,15 +243,11 @@ func (conn *Connection) initConnection(url string) error {
 	}
 	conn.cluster.peerList = []peer{conn.cluster.leader}
 
-	/*
-
-		at the moment, the only allowed query is "level=" with
-		the desired consistency level
-
-	*/
+	// at the moment, the only allowed query is "level=" with
+	// the desired consistency level
 
 	// default
-	conn.consistencyLevel = cl_WEAK
+	conn.consistencyLevel = ConsistencyLevelWeak
 
 	// parse query params
 	query := u.Query()

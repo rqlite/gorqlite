@@ -6,9 +6,9 @@ jobs:
       - image: circleci/golang:1.17
       - image: rqlite/rqlite:latest
     steps:
-        - checkout
-        - run: go vet .
-        - run: go test -timeout 60s -v ./...
+      - checkout
+      - run: go vet .
+      - run: go test -timeout 60s -v ./...
 
 workflows:
   version: 2
