@@ -1,0 +1,23 @@
+{
+  "rqlite-0": {
+    "api_addr": "http://localhost:14003",
+    "addr": "localhost:14004",
+    "reachable": true,
+    "leader": false,
+    "time": 0.008691486
+  },
+  "rqlite-1": {
+    "api_addr": "http://localhost:14005",
+    "addr": "localhost:14006",
+    "reachable": true,
+    "leader": false,
+    "time": 0.007991488
+  },
+  "rqlite-2": {
+    "api_addr": "http://localhost:14001",
+    "addr": "localhost:14002",
+    "reachable": true,
+    "leader": true,
+    "time": 0.000180356
+  }
+}

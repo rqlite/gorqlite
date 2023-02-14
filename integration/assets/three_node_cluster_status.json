@@ -1,0 +1,236 @@
+{
+    "build": {
+        "branch": "master",
+        "build_time": "2022-10-24T14:28:28-0400",
+        "commit": "187098927ba9083a19fff36ed01eab0f8b1b045c",
+        "compiler": "gc",
+        "version": "v7.9.2"
+    },
+    "cluster": {
+        "addr": "localhost:14004",
+        "api_addr": "localhost:14003",
+        "https": "false"
+    },
+    "http": {
+        "auth": "enabled",
+        "bind_addr": "[::]:4001",
+        "cluster": {
+            "conn_pool_stats": {
+                "localhost:14002": {
+                    "idle": 4,
+                    "max_open_connections": 64,
+                    "open_connections": 4
+                }
+            },
+            "local_node_addr": "localhost:14004",
+            "timeout": 30000000000
+        },
+        "queue": {
+            "_default": {
+                "batch_size": 16,
+                "max_size": 128,
+                "sequence_number": 0,
+                "timeout": 50000000
+            }
+        }
+    },
+    "node": {
+        "current_time": "2022-10-28T03:24:33.156407947Z",
+        "start_time": "2022-10-28T00:27:21.205699151Z",
+        "uptime": "2h57m11.95070937s"
+    },
+    "os": {
+        "executable": "/bin/rqlited",
+        "hostname": "rqlite-0",
+        "page_size": 4096,
+        "pid": 1,
+        "ppid": 0
+    },
+    "runtime": {
+        "GOARCH": "amd64",
+        "GOMAXPROCS": 8,
+        "GOOS": "linux",
+        "num_cpu": 8,
+        "num_goroutine": 20,
+        "version": "go1.18"
+    },
+    "store": {
+        "addr": "localhost:14004",
+        "apply_timeout": "10s",
+        "db_applied_index": 0,
+        "db_conf": {
+            "memory": true,
+            "fk_constraints": false
+        },
+        "dir": "/rqlite/file/data",
+        "dir_size": 65536,
+        "election_timeout": "1s",
+        "fsm_index": 10,
+        "heartbeat_timeout": "1s",
+        "leader": {
+            "addr": "localhost:14002",
+            "node_id": "rqlite-2"
+        },
+        "no_freelist_sync": false,
+        "node_id": "rqlite-0",
+        "nodes": [
+            {
+                "id": "rqlite-0",
+                "addr": "localhost:14004",
+                "suffrage": "Voter"
+            },
+            {
+                "id": "rqlite-1",
+                "addr": "localhost:14006",
+                "suffrage": "Voter"
+            },
+            {
+                "id": "rqlite-2",
+                "addr": "localhost:14002",
+                "suffrage": "Voter"
+            }
+        ],
+        "observer": {
+            "dropped": 0,
+            "observed": 1
+        },
+        "raft": {
+            "applied_index": 13,
+            "bolt": {
+                "FreePageN": 1,
+                "PendingPageN": 2,
+                "FreeAlloc": 12288,
+                "FreelistInuse": 40,
+                "TxN": 274,
+                "OpenTxN": 0,
+                "TxStats": {
+                    "PageCount": 3,
+                    "PageAlloc": 12288,
+                    "CursorCount": 555,
+                    "NodeCount": 2,
+                    "NodeDeref": 0,
+                    "Rebalance": 0,
+                    "RebalanceTime": 0,
+                    "Split": 0,
+                    "Spill": 1,
+                    "SpillTime": 6312,
+                    "Write": 5,
+                    "WriteTime": 3211871
+                }
+            },
+            "commit_index": 13,
+            "fsm_pending": 0,
+            "last_contact": "32.346826ms",
+            "last_log_index": 13,
+            "last_log_term": 4,
+            "last_snapshot_index": 0,
+            "last_snapshot_term": 0,
+            "latest_configuration": "[{Suffrage:Voter ID:rqlite-0 Address:localhost:14004} {Suffrage:Voter ID:rqlite-2 Address:localhost:14002} {Suffrage:Voter ID:rqlite-1 Address:localhost:14006}]",
+            "latest_configuration_index": 0,
+            "log_size": 65536,
+            "num_peers": 2,
+            "protocol_version": 3,
+            "protocol_version_max": 3,
+            "protocol_version_min": 0,
+            "snapshot_version_max": 1,
+            "snapshot_version_min": 0,
+            "state": "Follower",
+            "term": 4
+        },
+        "request_marshaler": {
+            "compression_batch": 5,
+            "compression_size": 150,
+            "force_compression": false
+        },
+        "snapshot_interval": 30000000000,
+        "snapshot_threshold": 8192,
+        "sqlite3": {
+            "compile_options": [
+                "ATOMIC_INTRINSICS=1",
+                "COMPILER=gcc-9.4.0",
+                "DEFAULT_AUTOVACUUM",
+                "DEFAULT_CACHE_SIZE=-2000",
+                "DEFAULT_FILE_FORMAT=4",
+                "DEFAULT_JOURNAL_SIZE_LIMIT=-1",
+                "DEFAULT_MMAP_SIZE=0",
+                "DEFAULT_PAGE_SIZE=4096",
+                "DEFAULT_PCACHE_INITSZ=20",
+                "DEFAULT_RECURSIVE_TRIGGERS",
+                "DEFAULT_SECTOR_SIZE=4096",
+                "DEFAULT_SYNCHRONOUS=2",
+                "DEFAULT_WAL_AUTOCHECKPOINT=1000",
+                "DEFAULT_WAL_SYNCHRONOUS=1",
+                "DEFAULT_WORKER_THREADS=0",
+                "ENABLE_DBSTAT_VTAB",
+                "ENABLE_FTS3",
+                "ENABLE_FTS3_PARENTHESIS",
+                "ENABLE_RTREE",
+                "ENABLE_UPDATE_DELETE_LIMIT",
+                "MALLOC_SOFT_LIMIT=1024",
+                "MAX_ATTACHED=10",
+                "MAX_COLUMN=2000",
+                "MAX_COMPOUND_SELECT=500",
+                "MAX_DEFAULT_PAGE_SIZE=8192",
+                "MAX_EXPR_DEPTH=1000",
+                "MAX_FUNCTION_ARG=127",
+                "MAX_LENGTH=1000000000",
+                "MAX_LIKE_PATTERN_LENGTH=50000",
+                "MAX_MMAP_SIZE=0x7fff0000",
+                "MAX_PAGE_COUNT=1073741823",
+                "MAX_PAGE_SIZE=65536",
+                "MAX_SQL_LENGTH=1000000000",
+                "MAX_TRIGGER_DEPTH=1000",
+                "MAX_VARIABLE_NUMBER=32766",
+                "MAX_VDBE_OP=250000000",
+                "MAX_WORKER_THREADS=8",
+                "MUTEX_PTHREADS",
+                "OMIT_DEPRECATED",
+                "OMIT_LOAD_EXTENSION",
+                "OMIT_SHARED_CACHE",
+                "SYSTEM_MALLOC",
+                "TEMP_STORE=1",
+                "THREADSAFE=1"
+            ],
+            "conn_pool_stats": {
+                "ro": {
+                    "max_open_connections": 0,
+                    "open_connections": 1,
+                    "in_use": 0,
+                    "idle": 1,
+                    "wait_count": 0,
+                    "wait_duration": 0,
+                    "max_idle_closed": 0,
+                    "max_idle_time_closed": 0,
+                    "max_lifetime_closed": 0
+                },
+                "rw": {
+                    "max_open_connections": 1,
+                    "open_connections": 1,
+                    "in_use": 0,
+                    "idle": 1,
+                    "wait_count": 0,
+                    "wait_duration": 0,
+                    "max_idle_closed": 0,
+                    "max_idle_time_closed": 0,
+                    "max_lifetime_closed": 0
+                }
+            },
+            "db_size": 208896,
+            "mem_stats": {
+                "cache_size": -2000,
+                "freelist_count": 0,
+                "hard_heap_limit": 0,
+                "max_page_count": 1073741823,
+                "page_count": 51,
+                "page_size": 4096,
+                "soft_heap_limit": 0
+            },
+            "path": ":memory:",
+            "ro_dsn": "file:/NChOEdiFaCgfjjaMfrEM?mode=ro\u0026vfs=memdb\u0026_txlock=deferred\u0026_fk=false",
+            "rw_dsn": "file:/NChOEdiFaCgfjjaMfrEM?mode=rw\u0026vfs=memdb\u0026_txlock=immediate\u0026_fk=false",
+            "version": "3.38.5"
+        },
+        "startup_on_disk": false,
+        "trailing_logs": 10240
+    }
+}

@@ -103,13 +103,15 @@ func Open(connURL string) (*Connection, error) {
 		return conn, err
 	}
 
-	// call updateClusterInfo() to populate the cluster
-	// also tests the user's default
+	if !conn.disableClusterDiscovery {
+		// call updateClusterInfo() to re-populate the cluster and discover peers
+		// also tests the user's default
+		if err := conn.updateClusterInfo(); err != nil {
+			return conn, err
+		}
+	}
 
-	err = conn.updateClusterInfo()
-
-	// and the err from updateClusterInfo() will be our err as well
-	return conn, err
+	return conn, nil
 }
 
 // trace adds a message to the trace output

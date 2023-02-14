@@ -22,7 +22,10 @@ import (
 	nurl "net/url"
 )
 
-const defaultTimeout = 10
+const (
+	defaultTimeout                 = 10
+	defaultDisableClusterDiscovery = false
+)
 
 var (
 	// ErrClosed indicates that client connection was closed
@@ -59,12 +62,13 @@ type Connection struct {
 
 	// name           type                default
 
-	username          string           //   username or ""
-	password          string           //   username or ""
-	consistencyLevel  consistencyLevel //   WEAK
-	wantsHTTPS        bool             //   false unless connection URL is https
-	wantsTransactions bool             //   true unless user states otherwise
-	wantsQueueing     bool             //   perform queued writes
+	username                string           //   username or ""
+	password                string           //   username or ""
+	consistencyLevel        consistencyLevel //   WEAK
+	disableClusterDiscovery bool             //   false unless user states otherwise
+	wantsHTTPS              bool             //   false unless connection URL is https
+	wantsTransactions       bool             //   true unless user states otherwise
+	wantsQueueing           bool             //   perform queued writes
 
 	// variables below this line need to be initialized in Open()
 
@@ -94,6 +98,9 @@ func (conn *Connection) Leader() (string, error) {
 	if conn.hasBeenClosed {
 		return "", ErrClosed
 	}
+	if conn.disableClusterDiscovery {
+		return string(conn.cluster.leader), nil
+	}
 	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
 	if err != nil {
@@ -112,6 +119,13 @@ func (conn *Connection) Peers() ([]string, error) {
 		return ans, ErrClosed
 	}
 	plist := make([]string, 0)
+
+	if conn.disableClusterDiscovery {
+		for _, p := range conn.cluster.peerList {
+			plist = append(plist, string(p))
+		}
+		return plist, nil
+	}
 
 	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
 	err := conn.updateClusterInfo()
@@ -243,6 +257,15 @@ func (conn *Connection) initConnection(url string) error {
 			return errors.New("invalid consistency level: " + query.Get("level"))
 		}
 		conn.consistencyLevel = cl
+	}
+
+	conn.disableClusterDiscovery = defaultDisableClusterDiscovery
+	if query.Get("disableClusterDiscovery") != "" {
+		dpd, err := strconv.ParseBool(query.Get("disableClusterDiscovery"))
+		if err != nil {
+			return errors.New("invalid disableClusterDiscovery value: " + err.Error())
+		}
+		conn.disableClusterDiscovery = dpd
 	}
 
 	timeout := defaultTimeout

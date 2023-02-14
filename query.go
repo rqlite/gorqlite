@@ -237,6 +237,15 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 		return results, err
 	}
 
+	// if we got an error from the api, that's a showstopper
+	if errMsg, ok := sections["error"].(string); ok && errMsg != "" {
+		trace("%s: api ERROR: %s", conn.ID, errMsg)
+		var errResult QueryResult
+		errResult.Err = fmt.Errorf("%s", errMsg)
+		results = append(results, errResult)
+		return results, errResult.Err
+	}
+
 	// at this point, we have a "results" section and
 	// a "time" section.  we can ignore the latter.
 
