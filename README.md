@@ -5,7 +5,7 @@ gorqlite is a golang client for rqlite that provides easy-to-use abstractions fo
 
 It is not a database/sql driver (read below for why this is difficult at the present time) but instead provides similar semantics, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
-rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://github.com/rqlite/rqlite).
+rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://www.rqlite.io).
 
 ## Status
 
