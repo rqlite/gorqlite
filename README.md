@@ -9,7 +9,7 @@ rqlite is the distributed consistent sqlite database.  [Learn more about rqlite 
 
 ## Status
 
-gorqlite should be considered alpha until more testers share their experiences.  See TODO below.
+This client library is used in production by various groups, including Replicated. Check out [their blog post](https://www.replicated.com/blog/app-manager-with-rqlite) on their use of rqlite.
 
 ## Features
 
