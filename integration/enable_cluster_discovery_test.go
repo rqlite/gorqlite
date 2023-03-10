@@ -3,6 +3,7 @@ package integration
 import (
 	_ "embed"
 	"io/ioutil"
+	"sort"
 	"testing"
 
 	"github.com/rqlite/gorqlite"
@@ -53,9 +54,13 @@ func TestEnableClusterDiscovery(t *testing.T) {
 		t.Errorf("failed to get peers: %v", err)
 		return
 	}
+	// Sort the peers to ensure deterministic results
+	sort.Strings(peers)
+
 	if len(peers) != 3 {
 		t.Errorf("expected 3 peers, but got %d", len(peers))
 	}
+
 	if peers[0] != "localhost:14001" {
 		t.Errorf("peer #0 should be localhost:14001, but is %s", peers[0])
 	}
