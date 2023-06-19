@@ -48,6 +48,7 @@ const (
 	api_STATUS
 	api_WRITE
 	api_NODES
+	api_REQUEST
 )
 
 func init() {

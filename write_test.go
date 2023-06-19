@@ -3,6 +3,7 @@ package gorqlite_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -300,7 +301,7 @@ func TestWriteParameterized(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
 
-		wr, err := globalConnection.WriteOneContext(ctx, "DROP TABLE "+testTableName())
+		wr, err := globalConnection.WriteOneContext(ctx, "DROP TABLE IF EXISTS "+testTableName())
 		if err != nil {
 			t.Errorf("dropping table: %s - %s", err.Error(), wr.Err.Error())
 		}
@@ -327,6 +328,9 @@ func TestWriteParameterized(t *testing.T) {
 		results, err := globalConnection.WriteParameterized(
 			[]gorqlite.ParameterizedStatement{
 				{
+					Query: "CREATE TABLE IF NOT EXISTS " + testTableName() + " (id INTEGER, name TEXT)",
+				},
+				{
 					Query:     fmt.Sprintf("INSERT INTO %s (id, name) VALUES (?, ?)", testTableName()),
 					Arguments: []interface{}{1, "aaa bbb ccc"},
 				},
@@ -348,8 +352,239 @@ func TestWriteParameterized(t *testing.T) {
 			t.Errorf("writing multiple parameterized queries: %s", err.Error())
 		}
 
-		if len(results) != 4 {
+		if len(results) != 5 {
 			t.Errorf("expected 4 results, got %d", len(results))
 		}
 	})
+}
+
+func TestWrites(t *testing.T) {
+	t.Logf("trying Open")
+	conn, err := gorqlite.Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	t.Logf("trying Write DROP & CREATE")
+	results, err := conn.Write([]string{
+		"DROP TABLE IF EXISTS " + testTableName() + "",
+		"CREATE TABLE " + testTableName() + " (id integer, name text)",
+	})
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	t.Cleanup(func() {
+		_, err = conn.Write([]string{
+			"DROP TABLE IF EXISTS " + testTableName() + "",
+		})
+	})
+
+	t.Logf("trying Write INSERT")
+	insert := "INSERT INTO " + testTableName() + " (id, name) VALUES ( ?, ? )"
+	s := make([]*gorqlite.Statement, 0)
+	s = append(s, gorqlite.NewStatement(insert, 1, "aaa bbb ccc"))
+	s = append(s, gorqlite.NewStatement(insert, 2, "ddd eee fff"))
+	s = append(s, gorqlite.NewStatement(insert, 3, "ggg hhh iii"))
+	s = append(s, gorqlite.NewStatement(insert, 4, "jjj kkk lll"))
+	results, err = conn.WriteStmt(context.Background(), s...)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	if len(results) != 4 {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+	t.Logf("trying Write DROP")
+	results, err = conn.Write([]string{"DROP TABLE IF EXISTS " + testTableName()})
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+
+}
+
+func TestRequests(t *testing.T) {
+	t.Logf("trying Open")
+	conn, err := gorqlite.Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	t.Logf("trying Write DROP & CREATE")
+	results, err := conn.Write([]string{
+		"DROP TABLE IF EXISTS " + testTableName() + "",
+		"CREATE TABLE " + testTableName() + " (id integer, name text)",
+	})
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	t.Cleanup(func() {
+		_, err = conn.Write([]string{
+			"DROP TABLE IF EXISTS " + testTableName() + "",
+		})
+	})
+
+	if len(results) != 2 {
+		t.Errorf("expected 2 results, got %d", len(results))
+	}
+	if results[1].RowsAffected != 1 {
+		t.Errorf("expected 1 row changed, got %d", results[1].RowsAffected)
+	}
+
+	t.Logf("trying Write INSERT & REQUEST")
+	insert := "INSERT INTO " + testTableName() + " (id, name) VALUES ( ?, ? )"
+	s := make([]*gorqlite.Statement, 0)
+	s = append(s, gorqlite.NewStatement(insert, 1, "aaa bbb ccc"))
+	s = append(s, gorqlite.NewStatement(insert, 2, "ddd eee fff"))
+	s = append(s, gorqlite.NewStatement(insert, 3, "ggg hhh iii"))
+	s = append(s, gorqlite.NewStatement(insert, 4, "jjj kkk lll"))
+	update := "UPDATE " + testTableName() + " SET name=? WHERE id=? RETURNING id"
+	s = append(s, gorqlite.NewStatement(update, "tony", 1).WithReturning(true))
+	get := "SELECT id FROM " + testTableName() + " WHERE id=? "
+	s = append(s, gorqlite.NewStatement(get, 1))
+
+	reqResults, err := conn.RequestStmt(context.Background(), s...)
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+	if len(reqResults) != 6 {
+		t.Logf("--> FAILED - expected 6 results, got %v", len(reqResults))
+		t.Fail()
+	}
+	for i := 0; i < 4; i++ {
+		if !reqResults[i].Query.IsZero() {
+			t.Errorf("expected NO query result for request %d", i)
+		}
+		if reqResults[i].Write.IsZero() {
+			t.Errorf("expected write result for request %d", i)
+		}
+	}
+	for i := 4; i < 6; i++ {
+		if !reqResults[i].Write.IsZero() {
+			t.Errorf("expected NO write result for request %d", i)
+		}
+		if reqResults[i].Query.IsZero() {
+			t.Errorf("expected query result for request %d", i)
+		}
+		if len(reqResults[i].Query.Columns()) != 1 {
+			t.Errorf("expected query result of request %d with 1 column, got %d", i, len(reqResults[i].Query.Columns()))
+		}
+		if len(reqResults[i].Query.Types()) != 1 {
+			t.Errorf("expected query result of request %d with 1 type, got %d", i, len(reqResults[i].Query.Types()))
+		}
+		if reqResults[i].Query.NumRows() != int64(1) {
+			t.Errorf("expected query result of request %d with 1 value, got %d", i, reqResults[i].Query.NumRows())
+		}
+		val := 0
+		if !reqResults[i].Query.Next() {
+			t.Errorf("expected 1 query result of request %d", i)
+		}
+		err = reqResults[i].Query.Scan(&val)
+		if err != nil {
+			t.Errorf("expected int query result of request %d", i)
+		}
+		if val != 1 {
+			t.Errorf("expected query result of request %d value 1, got %d", i, val)
+		}
+	}
+
+	t.Logf("trying Write DROP")
+	results, err = conn.Write([]string{"DROP TABLE IF EXISTS " + testTableName()})
+	if err != nil {
+		t.Logf("--> FAILED")
+		t.Fail()
+	}
+}
+
+func TestReadWriteLargeNumbers(t *testing.T) {
+	conn, err := gorqlite.Open(testUrl())
+	if err != nil {
+		t.Logf("--> FATAL")
+		t.Fatal(err)
+	}
+
+	_, err = conn.Write([]string{
+		"DROP TABLE IF EXISTS " + testTableName() + "",
+		"CREATE TABLE " + testTableName() + " (id integer, nanos integer, length double, name text)",
+	})
+	if err != nil {
+		t.Logf("--> CREATE TABLE FAILED %v", err)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, err = conn.Write([]string{
+			"DROP TABLE IF EXISTS " + testTableName() + "",
+		})
+	})
+
+	type thing struct {
+		id     int64
+		nanos  int64
+		length float64
+		name   string
+	}
+
+	now := time.Now().UnixNano()
+	makeLen := func(n int64) float64 {
+		return float64(n)/10000.0 + 0.45
+	}
+	toInsert := []*thing{
+		{id: 1, nanos: now + 1, length: makeLen(now) + 0.1, name: "aaa"},
+		{id: 2, nanos: now + 2, length: makeLen(now) + 0.2, name: "bbb"},
+		{id: 3, nanos: now + 3, length: makeLen(now) + 0.3, name: "ccc"},
+		{id: 4, nanos: now + 4, length: makeLen(now) + 0.4, name: "ddd"},
+	}
+
+	t.Logf("trying Write INSERT")
+	insert := "INSERT INTO " + testTableName() + " (id, nanos, length, name) VALUES ( ?, ?, ?, ? )"
+	s := make([]*gorqlite.Statement, 0)
+	for _, ti := range toInsert {
+		s = append(s, gorqlite.NewStatement(insert, ti.id, ti.nanos, ti.length, ti.name))
+	}
+	_, err = conn.WriteStmt(context.Background(), s...)
+	if err != nil {
+		t.Logf("--> INSERT FAILED %v", err)
+		t.Fatal(err)
+	}
+
+	qrs, err := conn.QueryStmt(
+		context.Background(),
+		gorqlite.NewStatement("SELECT id, nanos, length, name FROM "+testTableName()))
+	if err != nil {
+		t.Logf("--> QUERY FAILED %v", err)
+		t.Fatal(err)
+	}
+	if len(qrs) != 1 {
+		t.Fatal("--> QUERY FAILED expected 1 result, got ", len(qrs))
+	}
+	qr := qrs[0]
+
+	ret := make([]*thing, 0)
+	for qr.Next() {
+		s := &thing{}
+		err = qr.Scan(&s.id, &s.nanos, &s.length, &s.name)
+		if err != nil {
+			t.Logf("--> SCAN FAILED %v", err)
+			t.Fatal(err)
+		}
+		ret = append(ret, s)
+	}
+	if len(ret) != len(toInsert) {
+		t.Fatal(fmt.Sprintf("--> QUERY FAILED expected %d things, got %d", len(toInsert), len(ret)))
+	}
+	//for _, r := range ret {
+	//	fmt.Println(r.id, r.nanos, fmt.Sprintf("%.3f", r.length), r.name)
+	//}
+	for i, ti := range toInsert {
+		if !reflect.DeepEqual(ti, ret[i]) {
+			t.Fatal(fmt.Sprintf("--> expected equal %#v and %#v", ti, ret[i]))
+		}
+	}
 }

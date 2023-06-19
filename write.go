@@ -49,8 +49,7 @@ import (
 
  * *****************************************************************/
 
-// WriteOne wraps Write() into a single-statement
-// method.
+// WriteOne wraps Write() into a single-statement method.
 //
 // WriteOne uses context.Background() internally; to specify the context, use WriteOneContext.
 func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
@@ -77,6 +76,10 @@ func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) 
 func (conn *Connection) WriteOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (wr WriteResult, err error) {
 	wra, err := conn.WriteParameterizedContext(ctx, []ParameterizedStatement{statement})
 	return wra[0], err
+}
+
+func (conn *Connection) WriteStmt(ctx context.Context, sqlStatements ...*Statement) (results []WriteResult, err error) {
+	return conn.WriteParameterizedContext(ctx, makeParameterizedStatements(sqlStatements))
 }
 
 // Write is used to perform DDL/DML in the database synchronously without parameters.
@@ -140,9 +143,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	results = make([]WriteResult, 0)
 
 	if conn.hasBeenClosed {
-		var errResult WriteResult
-		errResult.Err = ErrClosed
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: ErrClosed})
 		return results, ErrClosed
 	}
 
@@ -151,9 +152,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
 	trace("%s: rqliteApiCall() OK", conn.ID)
@@ -162,68 +161,77 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	err = json.Unmarshal(response, &sections)
 	if err != nil {
 		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: err})
+		return results, err
+	}
+	// stop if we got an error from the api
+	if errMsg, ok := sections["error"].(string); ok && errMsg != "" {
+		trace("%s: api ERROR: %s", conn.ID, errMsg)
+
+		err = fmt.Errorf("%s", errMsg)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
 
 	// at this point, we have a "results" section and
-	// a "time" section.  we can igore the latter.
+	// a "time" section.  we can ignore the latter.
 
 	resultsArray, ok := sections["results"].([]interface{})
 	if !ok {
 		err = errors.New("result key is missing from response")
 		trace("%s: sections[\"results\"] ERROR: %s", conn.ID, err)
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
+
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
 	numStatementErrors := 0
 	for n, k := range resultsArray {
 		trace("%s: starting on result %d", conn.ID, n)
-		thisResult := k.(map[string]interface{})
-
-		var thisWR WriteResult
-		thisWR.conn = conn
-
-		// did we get an error?
-		_, ok := thisResult["error"]
-		if ok {
-			trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
-			thisWR.Err = errors.New(thisResult["error"].(string))
-			results = append(results, thisWR)
-			numStatementErrors += 1
-			continue
+		thisWR := conn.makeWriteResult(k.(map[string]interface{}))
+		if thisWR.Err != nil {
+			numStatementErrors++
+		} else {
+			trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
 		}
-
-		_, ok = thisResult["last_insert_id"]
-		if ok {
-			thisWR.LastInsertID = int64(thisResult["last_insert_id"].(float64))
-		}
-
-		_, ok = thisResult["rows_affected"] // could be zero for a CREATE
-		if ok {
-			thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
-		}
-		_, ok = thisResult["time"] // could be nil
-		if ok {
-			thisWR.Timing = thisResult["time"].(float64)
-		}
-
-		trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
 		results = append(results, thisWR)
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
-
 	if numStatementErrors > 0 {
 		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
-	} else {
-		return results, nil
 	}
+
+	return results, nil
+}
+
+func (conn *Connection) makeWriteResult(thisResult map[string]interface{}) WriteResult {
+	thisWR := WriteResult{
+		ID: conn.ID,
+	}
+
+	// did we get an error?
+	_, ok := thisResult["error"]
+	if ok {
+		trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
+		thisWR.Err = errors.New(thisResult["error"].(string))
+		return thisWR
+	}
+
+	_, ok = thisResult["last_insert_id"]
+	if ok {
+		thisWR.LastInsertID = int64(thisResult["last_insert_id"].(float64))
+	}
+
+	_, ok = thisResult["rows_affected"] // could be zero for a CREATE
+	if ok {
+		thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
+	}
+	_, ok = thisResult["time"] // could be nil
+	if ok {
+		thisWR.Timing = thisResult["time"].(float64)
+	}
+	return thisWR
 }
 
 // QueueOne is a convenience method that wraps Queue into a single-statement.
@@ -320,9 +328,13 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 //
 // Write() returns an array of WriteResult vars, while WriteOne() returns a single WriteResult.
 type WriteResult struct {
-	Err          error // don't trust the rest if this isn't nil
-	Timing       float64
-	RowsAffected int64 // affected by the change
-	LastInsertID int64 // if relevant, otherwise zero value
-	conn         *Connection
+	ID           string  // ID of connection
+	Err          error   // don't trust the rest if this isn't nil
+	Timing       float64 // timing
+	RowsAffected int64   // affected by the change
+	LastInsertID int64   // if relevant, otherwise zero value
+}
+
+func (w *WriteResult) IsZero() bool {
+	return w.Timing == 0 && w.RowsAffected == 0 && w.LastInsertID == 0 && w.Err == nil
 }
