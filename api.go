@@ -48,7 +48,11 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 		url := conn.assembleURL(apiOp, peer)
 
 		// Prepare request
-		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(requestBody))
+		var bodyReader io.Reader
+		if requestBody != nil {
+			bodyReader = bytes.NewBuffer(requestBody)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 		if err != nil {
 			trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))

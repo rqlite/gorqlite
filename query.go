@@ -388,6 +388,39 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 	return ans, nil
 }
 
+// Slice returns the current row (as advanced by Next()) as a []interface{}.
+//
+// The slice is a shallow copy of the internal representation of the row data.
+//
+// Note that only json values are supported, so you will need to type the interface{} accordingly.
+func (qr *QueryResult) Slice() ([]interface{}, error) {
+	trace("%s: Slice() called", qr.conn.ID)
+
+	if qr.rowNumber == -1 {
+		return nil, errors.New("you need to Next() before you Slice(), sorry, it's complicated")
+	}
+
+	thisRowValues := qr.values[qr.rowNumber].([]interface{})
+	ans := make([]interface{}, len(thisRowValues))
+	for i, v := range thisRowValues {
+		switch qr.types[i] {
+		case "date", "datetime":
+			if v != nil {
+				t, err := toTime(v)
+				if err != nil {
+					return ans, err
+				}
+				ans[i] = t
+			} else {
+				ans[i] = nil
+			}
+		default:
+			ans[i] = v
+		}
+	}
+	return ans, nil
+}
+
 /* *****************************************************************
 
 	method: QueryResult.Next()
