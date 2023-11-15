@@ -212,6 +212,25 @@ If you use access control, any user connecting will need the "status" permission
 
 rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be sub-optimal.
 
+## Using with database/sql
+
+It is recommended that you use the main gorqlite-specific API when possible. However, if you need to use gorqlite with database/sql, you can just import `github.com/rqlite/gorqlite/stdlib`. For example:
+
+```go
+package main
+
+import (
+	"database/sql"
+
+	_ "github.com/rqlite/gorqlite/stdlib"
+)
+
+func main() {
+	db, err := sql.Open("rqlite", "http://")
+	// do something with the database
+}
+```
+
 ## TODO
 
 https has not been tested yet.  In theory, https should work just fine because it's just a URL to gorqlite, but it has not been.
@@ -227,22 +246,6 @@ Several features may be added in the future:
 - since connections are just config info, it should be possible to clone them, which would save startup time for new connections.  This needs to be thread-safe, though, since a connection at any time could be updating its cluster info, etc.
 
 - gorqlite always talks to the master (unless it's searching for a master).  In theory, you talk to a non-master in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the default URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
-
-## Why not a database/sql driver?
-
-The original intent was to develop a proper database/sql driver, but this is not possible given rqlite's design.  Also, this would limit the API to database/sql functions, and there were many more things we could do with rqlite (cluster status, etc.)
-
-The chief reasons a proper database/sql driver is not possible are:
-
-* rqlite supports transactions, but only in a single batch.  You can group many statements into a single transaction, but you must submit them as a single unit.  You cannot start a transaction, send some statements, come back later and submit some more, and then later commit.
-
-* As a consequence, there is no rollback.
-
-* The statement parsing/preparation API is not exposed at the SQL layer by sqlite, and hence it's not exposed by rqlite.  What this means is that there's no way to prepare a statement (`"INSERT INTO superheroes (?,?)"`) and then later bind executions to it.  (In case you're wondering, yes, it would be possible for gorqlite to include a copy of sqlite3 and use its engine, but the sqlite C call to `sqlite3_prepare_v2()` will fail because a local sqlite3 won't know your DB's schemas and the `sqlite3_prepare_v2()` call validates the statement against the schema.  We could open the local sqlite .db file maintained by rqlite and validate against that, but there is no way to make a consistency guarantee between time of preparation and execution, especially since the user can mix DDL and DML in a single transaction).
-
-* So we've turned off `Begin()`, `Rollback()`, and `Commit()`, and now we need to turn off `Prepare()`.
-
-* As a consequence, there is no point in having statements, so they are unsupported.  At this point, so much of the `database/sql` API is returning `errors.New("NOT IMPLEMENTED")` that we might as well use an rqlite-specific library.
 
 ## Other Design Notes
 
