@@ -3,7 +3,7 @@
 
 gorqlite is a golang client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
 
-It is not a database/sql driver (read below for why this is difficult at the present time) but instead provides similar semantics, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
+It provides an idiomatic API specialized for rqlite and a database/sql driver (read below for more information on it). The main API is provides similar semantics to database/sql, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
 rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://www.rqlite.io).
 
@@ -212,9 +212,9 @@ If you use access control, any user connecting will need the "status" permission
 
 rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be sub-optimal.
 
-## Using with database/sql
+## Driver for database/sql
 
-It is recommended that you use the main gorqlite-specific API when possible. However, if you need to use gorqlite with database/sql, you can just import `github.com/rqlite/gorqlite/stdlib`. For example:
+It is recommended that you use the main gorqlite-specific API when possible. However, if you need to use gorqlite with database/sql, you can import `github.com/rqlite/gorqlite/stdlib`. For example:
 
 ```go
 package main
@@ -227,9 +227,25 @@ import (
 
 func main() {
 	db, err := sql.Open("rqlite", "http://")
-	// do something with the database
+	if err != nil {
+		panic(err)
+	}
+	_, err := db.Exec("CREATE TABLE users (id INTEGER, name TEXT)")
+	if err != nil {
+		panic(err)
+	}
 }
 ```
+
+The following limitations apply when using the rqlite database/sql driver:
+
+* rqlite supports transactions, but only in a single batch.  You can group many statements into a single transaction, but you must submit them as a single unit.  You cannot start a transaction, send some statements, come back later and submit some more, and then later commit.
+
+* As a consequence, there is no rollback.
+
+* The statement parsing/preparation API is not exposed at the SQL layer by sqlite, and hence it's not exposed by rqlite.  What this means is that there's no way to prepare a statement (`"INSERT INTO superheroes (?,?)"`) and then later bind executions to it.  (In case you're wondering, yes, it would be possible for gorqlite to include a copy of sqlite3 and use its engine, but the sqlite C call to `sqlite3_prepare_v2()` will fail because a local sqlite3 won't know your DB's schemas and the `sqlite3_prepare_v2()` call validates the statement against the schema.  We could open the local sqlite .db file maintained by rqlite and validate against that, but there is no way to make a consistency guarantee between time of preparation and execution, especially since the user can mix DDL and DML in a single transaction).
+
+* Therefore, `Begin()`, `Rollback()`, `Commit()`, and `Prepare()` are all no-ops that return no errors but don't do anything.
 
 ## TODO
 
@@ -249,9 +265,9 @@ Several features may be added in the future:
 
 ## Other Design Notes
 
-In `database/sql`, `Open()` doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
+In standard `database/sql` drivers, `Open()` doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
 
-Unlike `database/sql` connections, a gorqlite connection is not thread-safe.  
+Unlike `database/sql` connections, a gorqlite connection in the main gorqlite-specific API is not thread-safe. However, a gorqlite database/sql connection through package `stdlib` *is* thread-safe.
 
 `Close()` will set a flag so if you try to use the connection afterwards, it will fail.  But otherwise, you can merrily let your connections be garbage-collected with no harm, because they're just configuration tracking bundles and everything to the rqlite cluster is stateless.  Indeed, the true reason that `Close()` exists is the author's feeling that if you open something, you should be able to close it.  So why not `GetConnection()` then instead of `Open()`?  Or `GetClusterConfigurationTrackingObject()`?  I don't know.  Fork me.
 
