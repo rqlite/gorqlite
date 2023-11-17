@@ -274,5 +274,5 @@ These can overridden using the environment variables:
 	GORQLITE_TEST_TABLE=some_other_table
 
 ## Pronunciation
-rqlite is supposed to be pronounced "ree qwell lite".  So you could pronounce gorqlite as either "go ree kwell lite" or "gork lite".  The Klingon in me prefers the latter.  Really, isn't rqlite just the kind of battle-hardened, lean and mean system Klingons would use?  **Qapla'!**
+rqlite is supposed to be pronounced "ree qwell lite" (though many people pronounce is "R Q lite" too).  So you could pronounce gorqlite as either "go ree kwell lite" or "gork lite".  The Klingon in me prefers the latter.  Really, isn't rqlite just the kind of battle-hardened, lean and mean system Klingons would use?  **Qapla'!**
 
