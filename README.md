@@ -284,6 +284,8 @@ By default, gorqlite uses this config for testing:
 	database URL : http://localhost:4001
 	table name   : gorqlite_test
 
+Also, the tests in package stdlib use the same config but a table name of `gorqlite_test_stdlib`.
+
 These can overridden using the environment variables:
 
 	GORQLITE_TEST_URL=https://somewhere.example.com:1234
@@ -291,6 +293,7 @@ These can overridden using the environment variables:
 	etc.
 
 	GORQLITE_TEST_TABLE=some_other_table
+	GORQLITE_TEST_TABLE_STDLIB=some_other_table
 
 ## Pronunciation
 rqlite is supposed to be pronounced "ree qwell lite".  So you could pronounce gorqlite as either "go ree kwell lite" or "gork lite".  The Klingon in me prefers the latter.  Really, isn't rqlite just the kind of battle-hardened, lean and mean system Klingons would use?  **Qapla'!**

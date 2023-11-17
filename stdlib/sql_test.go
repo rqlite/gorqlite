@@ -38,9 +38,9 @@ func testUrl() string {
 }
 
 func testTableName() string {
-	tableName := os.Getenv("GORQLITE_TEST_TABLE")
+	tableName := os.Getenv("GORQLITE_TEST_TABLE_STDLIB")
 	if tableName == "" {
-		tableName = "gorqlite_test"
+		tableName = "gorqlite_test_stdlib"
 	}
 	return tableName
 }
