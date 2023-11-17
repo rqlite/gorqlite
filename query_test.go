@@ -95,8 +95,9 @@ func TestQueryOne(t *testing.T) {
 		if r["name"].(string) != "Ferengi" {
 			t.Errorf("expected Ferengi, got %v", r["name"])
 		}
-		if ts, ok := r["ts"]; ok {
-			if ts, ok := ts.(time.Time); ok {
+
+		if tsi, ok := r["ts"]; ok {
+			if ts, ok := tsi.(time.Time); ok {
 				// time should not be zero because it defaults to current utc time
 				if ts.IsZero() {
 					t.Errorf("time should not be zero, got zero")
@@ -104,7 +105,32 @@ func TestQueryOne(t *testing.T) {
 					t.Errorf("time %q is before start %q", ts, started)
 				}
 			} else {
-				t.Errorf("ts is a real %T", ts)
+				t.Errorf("ts is a real %T", tsi)
+			}
+		} else {
+			t.Errorf("ts not found")
+		}
+
+		t.Logf("trying Slice()")
+		s, err := qr.Slice()
+		if err != nil {
+			t.Errorf("failed during slice: %v", err.Error())
+		}
+
+		if s[0].(string) != "Ferengi" {
+			t.Errorf("expected Ferengi, got %v", s[0])
+		}
+
+		if tsi := s[1]; tsi != nil {
+			if ts, ok := tsi.(time.Time); ok {
+				// time should not be zero because it defaults to current utc time
+				if ts.IsZero() {
+					t.Errorf("time should not be zero, got zero")
+				} else if ts.Before(started) {
+					t.Errorf("time %q is before start %q", ts, started)
+				}
+			} else {
+				t.Errorf("ts is a real %T", tsi)
 			}
 		} else {
 			t.Errorf("ts not found")
@@ -171,6 +197,18 @@ func TestQueryOne(t *testing.T) {
 		}
 
 		_, err = qr.Map()
+		if err == nil {
+			t.Errorf("expected an error to be returned, got nil")
+		}
+	})
+
+	t.Run("Slice before next", func(t *testing.T) {
+		qr, err := globalConnection.QueryOne("SELECT name  FROM " + testTableName() + " WHERE id = 3")
+		if err != nil {
+			t.Errorf("failed during query: %v - %v", err.Error(), qr.Err.Error())
+		}
+
+		_, err = qr.Slice()
 		if err == nil {
 			t.Errorf("expected an error to be returned, got nil")
 		}
@@ -334,16 +372,40 @@ func TestQueryOneParameterized(t *testing.T) {
 			t.Errorf("expected 'Ferengi', got %s", r["name"].(string))
 		}
 
-		if ts, ok := r["ts"]; ok {
-			if tss, ok := ts.(time.Time); ok {
+		if tsi, ok := r["ts"]; ok {
+			if ts, ok := tsi.(time.Time); ok {
 				// time should not be zero because it defaults to current utc time
-				if tss.IsZero() {
+				if ts.IsZero() {
 					t.Error("time is zero")
-				} else if tss.Before(started) {
-					t.Errorf("time %q is before start %q", tss, started)
+				} else if ts.Before(started) {
+					t.Errorf("time %q is before start %q", ts, started)
 				}
 			} else {
-				t.Errorf("ts is a real %T", ts)
+				t.Errorf("ts is a real %T", tsi)
+			}
+		} else {
+			t.Error("ts not found")
+		}
+
+		s, err := qr.Slice()
+		if err != nil {
+			t.Errorf("slice: %s", err.Error())
+		}
+
+		if s[0].(string) != "Ferengi" {
+			t.Errorf("expected 'Ferengi', got %s", s[0].(string))
+		}
+
+		if tsi := s[1]; tsi != nil {
+			if ts, ok := tsi.(time.Time); ok {
+				// time should not be zero because it defaults to current utc time
+				if ts.IsZero() {
+					t.Error("time is zero")
+				} else if ts.Before(started) {
+					t.Errorf("time %q is before start %q", ts, started)
+				}
+			} else {
+				t.Errorf("ts is a real %T", tsi)
 			}
 		} else {
 			t.Error("ts not found")
