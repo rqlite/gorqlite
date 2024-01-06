@@ -139,7 +139,12 @@ func (conn *Connection) updateClusterInfo() error {
 	if ok {
 		leaderRaftAddr = leaderMap["node_id"].(string)
 	} else {
-		leaderRaftAddr = sMap["leader"].(string)
+		addr, ok := sMap["leader"].(string)
+		if !ok {
+			return errors.New("store is not open")
+		}
+
+		leaderRaftAddr = addr
 	}
 	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
 
