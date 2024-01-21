@@ -199,6 +199,45 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 	return conn.QueryParameterizedContext(context.Background(), sqlStatements)
 }
 
+func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) QueryResult {
+	var qr QueryResult
+
+	// did we get an error?
+	_, ok := thisResult["error"]
+	if ok {
+		trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
+		qr.Err = errors.New(thisResult["error"].(string))
+		return qr
+	}
+
+	// time is a float64 (could be nil)
+	_, ok = thisResult["time"]
+	if ok {
+		qr.Timing = thisResult["time"].(float64)
+	}
+
+	// column & type are an array of strings
+	c := thisResult["columns"].([]interface{})
+	t := thisResult["types"].([]interface{})
+	for i := 0; i < len(c); i++ {
+		qr.columns = append(qr.columns, c[i].(string))
+		qr.types = append(qr.types, t[i].(string))
+	}
+
+	// and values are an array of arrays
+	if thisResult["values"] != nil {
+		qr.values = thisResult["values"].([]interface{})
+	} else {
+		trace("%s: fyi, no values this query", conn.ID)
+	}
+
+	qr.rowNumber = -1
+
+	trace("%s: this result (#col,time) %d %f", conn.ID, len(qr.columns), qr.Timing)
+
+	return qr
+}
+
 // QueryParameterizedContext is used to perform SELECT operations in the database.
 //
 // It takes an array of parameterized SQL statements and executes them in a single transaction,
@@ -255,47 +294,12 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	numStatementErrors := 0
 	for n, r := range resultsArray {
 		trace("%s: parsing result %d", conn.ID, n)
-		var thisQR QueryResult
-		thisQR.conn = conn
-
-		// r is a hash with columns, types, values, and time
-		thisResult := r.(map[string]interface{})
-
-		// did we get an error?
-		_, ok := thisResult["error"]
-		if ok {
-			trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
-			thisQR.Err = errors.New(thisResult["error"].(string))
-			results = append(results, thisQR)
+		qr := conn.parseQueryResult(r.(map[string]interface{}))
+		qr.conn = conn
+		results = append(results, qr)
+		if qr.Err != nil {
 			numStatementErrors++
-			continue
 		}
-
-		// time is a float64 (could be nil)
-		_, ok = thisResult["time"]
-		if ok {
-			thisQR.Timing = thisResult["time"].(float64)
-		}
-
-		// column & type are an array of strings
-		c := thisResult["columns"].([]interface{})
-		t := thisResult["types"].([]interface{})
-		for i := 0; i < len(c); i++ {
-			thisQR.columns = append(thisQR.columns, c[i].(string))
-			thisQR.types = append(thisQR.types, t[i].(string))
-		}
-
-		// and values are an array of arrays
-		if thisResult["values"] != nil {
-			thisQR.values = thisResult["values"].([]interface{})
-		} else {
-			trace("%s: fyi, no values this query", conn.ID)
-		}
-
-		thisQR.rowNumber = -1
-
-		trace("%s: this result (#col,time) %d %f", conn.ID, len(thisQR.columns), thisQR.Timing)
-		results = append(results, thisQR)
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))

@@ -125,6 +125,33 @@ func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatemen
 	return conn.WriteParameterizedContext(context.Background(), sqlStatements)
 }
 
+func (conn *Connection) parseWriteResult(thisResult map[string]interface{}) WriteResult {
+	var wr WriteResult
+
+	// did we get an error?
+	_, ok := thisResult["error"]
+	if ok {
+		trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
+		wr.Err = errors.New(thisResult["error"].(string))
+		return wr
+
+	}
+	_, ok = thisResult["last_insert_id"]
+	if ok {
+		wr.LastInsertID = int64(thisResult["last_insert_id"].(float64))
+	}
+	_, ok = thisResult["rows_affected"] // could be zero for a CREATE
+	if ok {
+		wr.RowsAffected = int64(thisResult["rows_affected"].(float64))
+	}
+	_, ok = thisResult["time"] // could be nil
+	if ok {
+		wr.Timing = thisResult["time"].(float64)
+	}
+	trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, wr.LastInsertID, wr.RowsAffected, wr.Timing)
+	return wr
+}
+
 // WriteParameterizedContext is used to perform DDL/DML in the database synchronously.
 //
 // WriteParameterizedContext takes an array of SQL statements, and returns an equal-sized array of WriteResults,
@@ -184,37 +211,12 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	numStatementErrors := 0
 	for n, k := range resultsArray {
 		trace("%s: starting on result %d", conn.ID, n)
-		thisResult := k.(map[string]interface{})
-
-		var thisWR WriteResult
-		thisWR.conn = conn
-
-		// did we get an error?
-		_, ok := thisResult["error"]
-		if ok {
-			trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
-			thisWR.Err = errors.New(thisResult["error"].(string))
-			results = append(results, thisWR)
+		wr := conn.parseWriteResult(k.(map[string]interface{}))
+		wr.conn = conn
+		results = append(results, wr)
+		if wr.Err != nil {
 			numStatementErrors += 1
-			continue
 		}
-
-		_, ok = thisResult["last_insert_id"]
-		if ok {
-			thisWR.LastInsertID = int64(thisResult["last_insert_id"].(float64))
-		}
-
-		_, ok = thisResult["rows_affected"] // could be zero for a CREATE
-		if ok {
-			thisWR.RowsAffected = int64(thisResult["rows_affected"].(float64))
-		}
-		_, ok = thisResult["time"] // could be nil
-		if ok {
-			thisWR.Timing = thisResult["time"].(float64)
-		}
-
-		trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, thisWR.LastInsertID, thisWR.RowsAffected, thisWR.Timing)
-		results = append(results, thisWR)
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
