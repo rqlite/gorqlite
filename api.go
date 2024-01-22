@@ -138,7 +138,7 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
 	var responseBody []byte
 
-	// Allow only api_QUERY and api_WRITE
+	// Allow only api_QUERY, api_WRITE and api_REQUEST
 	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_REQUEST {
 		return responseBody, errors.New("rqliteApiPost() called for invalid api operation")
 	}

@@ -97,7 +97,6 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 	// if we get an error Unmarshaling, that's a showstopper
 	var sections map[string]interface{}
 	err = json.Unmarshal(response, &sections)
-
 	if err != nil {
 		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
 		var errResult RequestResult
