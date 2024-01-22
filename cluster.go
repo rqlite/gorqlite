@@ -83,9 +83,11 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		builder.WriteString("/db/query")
 	case api_WRITE:
 		builder.WriteString("/db/execute")
+	case api_REQUEST:
+		builder.WriteString("/db/request")
 	}
 
-	if apiOp == api_QUERY || apiOp == api_WRITE {
+	if apiOp == api_QUERY || apiOp == api_WRITE || apiOp == api_REQUEST {
 		builder.WriteString("?timings&level=")
 		builder.WriteString(consistencyLevelNames[conn.consistencyLevel])
 		if conn.wantsTransactions {
@@ -105,6 +107,8 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		trace("%s: assembled URL for an api_NODES: %s", conn.ID, builder.String())
 	case api_WRITE:
 		trace("%s: assembled URL for an api_WRITE: %s", conn.ID, builder.String())
+	case api_REQUEST:
+		trace("%s: assembled URL for an api_REQUEST: %s", conn.ID, builder.String())
 	}
 
 	return builder.String()
