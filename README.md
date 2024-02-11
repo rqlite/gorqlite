@@ -18,8 +18,9 @@ This client library is used in production by various groups, including Replicate
 * A connection abstraction allows gorqlite to discover and remember the rqlite leader.  gorqlite will automatically try other peers if the leader is lost, enabling fault-tolerant API operations.
 * Timeout can be set on a per-Connection basis to accommodate those with far-flung empires.
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
-* Only a single node needs to be specified in the connection.  gorqlite will talk to it and figure out the rest of the cluster from its redirects and status API.
-* When cluster discovery is disabled, only the provided URL will be used to communicate with the API instead of discovering the leader and peers and retrying failed requests with different peers. This is helpful when using a Kubernetes service to handle the load balancing of the requests across healthy nodes.
+* Only a single node needs to be specified in the connection.  **By default gorqlite will talk to that node and figure out the rest of the cluster from its redirects and status API**. This is known as _Cluster Discovery_.
+* Depending on your deployment, **you may wish to disable _Cluster Discovery_**. If you do disable it only the provided URL will be used to communicate with the API instead of discovering the leader and peers and retrying failed requests with different peers. To disable _Cluster Discovery_ add `disableClusterDiscovery=true` as a URL Query Parameter when connecting to rqlite e.g. `http://localhost:14001?disableClusterDiscovery=true`.
+  * This is helpful, for example, when using a Kubernetes service to handle the load balancing of the requests across healthy nodes. 
 * Support for several rqlite-specific operations:
   * `Leader()` and `Peers()` to examine the cluster.
   * `SetConsistencyLevel()` can be called at any time on a connection to change the consistency level for future operations.
