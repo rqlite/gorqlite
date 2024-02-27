@@ -3,7 +3,7 @@
 
 gorqlite is a golang client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
 
-It provides an idiomatic API specialized for rqlite and a database/sql driver (read below for more information on it). The main API is provides similar semantics to database/sql, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
+It provides an idiomatic API specialized for rqlite and a database/sql driver (read below for more information on it). The main API provides similar semantics to database/sql, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
 rqlite is the distributed consistent sqlite database.  [Learn more about rqlite here](https://www.rqlite.io).
 
