@@ -51,7 +51,7 @@ conn, err := gorqlite.Open("https://mary:secret2@localhost:4001/")
 // different server, setting the rqlite consistency level
 conn, err := gorqlite.Open("https://mary:secret2@server1.example.com:4001/?level=none")
 // same without auth, setting the rqlite consistency level
-conn, err := gorliqte.Open("https://server2.example.com:4001/?level=weak")
+conn, err := gorqlite.Open("https://server2.example.com:4001/?level=weak")
 // different port, setting the rqlite consistency level and timeout
 conn, err := gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
 // different port, disabling cluster discovery in the client
