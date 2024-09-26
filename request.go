@@ -127,7 +127,7 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 		return results, err
 	}
 
-	numStatementErrors := 0
+	var statementErrors StatementErrors
 	for n, r := range resultsArray {
 		trace("%s: parsing result %d", conn.ID, n)
 		var thisR RequestResult
@@ -141,7 +141,7 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 			trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
 			thisR.Err = errors.New(thisResult["error"].(string))
 			results = append(results, thisR)
-			numStatementErrors++
+			statementErrors = append(statementErrors, thisR.Err)
 			continue
 		}
 
@@ -162,9 +162,5 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
-	if numStatementErrors > 0 {
-		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
-	}
-
-	return results, nil
+	return results, statementErrors
 }
