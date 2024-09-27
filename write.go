@@ -207,20 +207,20 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 		return results, err
 	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
-	var statementErrors StatementErrors
+	var errs []error
 	for n, k := range resultsArray {
 		trace("%s: starting on result %d", conn.ID, n)
 		wr := conn.parseWriteResult(k.(map[string]interface{}))
 		wr.conn = conn
 		results = append(results, wr)
 		if wr.Err != nil {
-			statementErrors = append(statementErrors, wr.Err)
+			errs = append(errs, wr.Err)
 		}
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
-	return results, statementErrors
+	return results, joinErrors(errs...)
 }
 
 // QueueOne is a convenience method that wraps Queue into a single-statement.

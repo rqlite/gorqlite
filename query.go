@@ -291,20 +291,20 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	resultsArray := sections["results"].([]interface{})
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
 
-	var statementErrors StatementErrors
+	var errs []error
 	for n, r := range resultsArray {
 		trace("%s: parsing result %d", conn.ID, n)
 		qr := conn.parseQueryResult(r.(map[string]interface{}))
 		qr.conn = conn
 		results = append(results, qr)
 		if qr.Err != nil {
-			statementErrors = append(statementErrors, qr.Err)
+			errs = append(errs, qr.Err)
 		}
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
-	return results, statementErrors
+	return results, joinErrors(errs...)
 }
 
 /* *****************************************************************
