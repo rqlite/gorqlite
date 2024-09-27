@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 )
 
 /* *****************************************************************
@@ -117,8 +116,7 @@ func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string
 //
 // WriteParameterized returns an error if one is encountered during its operation.
 // If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, it will return a generic
-// "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+// If one statement out of several has an error, you can look at the individual statement's Err for more info.
 //
 // WriteParameterized uses context.Background() internally; to specify the context, use WriteParameterizedContext.
 func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
@@ -161,8 +159,7 @@ func (conn *Connection) parseWriteResult(thisResult map[string]interface{}) Writ
 //
 // WriteParameterizedContext returns an error if one is encountered during its operation.
 // If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, it will return a generic
-// "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+// If one statement out of several has an error, you can look at the individual statement's Err for more info.
 func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
@@ -208,24 +205,20 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 		return results, err
 	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
-	numStatementErrors := 0
+	var errs []error
 	for n, k := range resultsArray {
 		trace("%s: starting on result %d", conn.ID, n)
 		wr := conn.parseWriteResult(k.(map[string]interface{}))
 		wr.conn = conn
 		results = append(results, wr)
 		if wr.Err != nil {
-			numStatementErrors += 1
+			errs = append(errs, wr.Err)
 		}
 	}
 
 	trace("%s: finished parsing, returning %d results", conn.ID, len(results))
 
-	if numStatementErrors > 0 {
-		return results, fmt.Errorf("there were %d statement errors", numStatementErrors)
-	} else {
-		return results, nil
-	}
+	return results, joinErrors(errs...)
 }
 
 // QueueOne is a convenience method that wraps Queue into a single-statement.

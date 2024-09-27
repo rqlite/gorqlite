@@ -74,7 +74,7 @@ results, err := conn.Write(statements)
 
 for n, v := range WriteResult {
 	fmt.Printf("for result %d, %d rows were affected\n",n,v.RowsAffected)
-	if ( v.Err != nil ) {
+	if v.Err != nil {
 		fmt.Printf("   we have this error: %s\n",v.Err.Error())
 	}
 }
