@@ -52,8 +52,7 @@ func (conn *Connection) RequestContext(ctx context.Context, sqlStatements []stri
 
 // RequestParameterized returns an error if one is encountered during its operation.
 // If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, it will return a generic
-// "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+// If one statement out of several has an error, you can look at the individual statement's Err for more info.
 //
 // RequestParameterized uses context.Background() internally; to specify the context, use RequestParameterizedContext.
 func (conn *Connection) RequestParameterized(sqlStatements []ParameterizedStatement) (results []RequestResult, err error) {
@@ -67,8 +66,7 @@ func (conn *Connection) RequestParameterized(sqlStatements []ParameterizedStatem
 
 // RequestParameterizedContext returns an error if one is encountered during its operation.
 // If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, it will return a generic
-// "there were %d statement errors" and you'll have to look at the individual statement's Err for more info.
+// If one statement out of several has an error, you can look at the individual statement's Err for more info.
 func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []RequestResult, err error) {
 	results = make([]RequestResult, 0)
 
