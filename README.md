@@ -1,7 +1,7 @@
-# gorqlite - a golang client for rqlite
+# gorqlite - a Go client for rqlite
 [![Circle CI](https://circleci.com/gh/rqlite/gorqlite/tree/master.svg?style=svg)](https://circleci.com/gh/rqlite/gorqlite/tree/master)
 
-gorqlite is a golang client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
+gorqlite is a Go client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
 
 It provides an idiomatic API specialized for rqlite and a database/sql driver (read below for more information on it). The main API provides similar semantics to database/sql, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
 
@@ -13,14 +13,14 @@ This client library is used in production by various groups, including Replicate
 
 ## Features
 
-* Abstracts the rqlite http API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an iterator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}.
-* Timings and other metadata (e.g., num rows affected, last insert ID, etc.) is conveniently available and parsed into appropriate types.
+* Abstracts the rqlite HTTP API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an iterator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}`.
+* Timings and other metadata (e.g., num rows affected, last insert ID, etc.) are conveniently available and parsed into appropriate types.
 * A connection abstraction allows gorqlite to discover and remember the rqlite leader.  gorqlite will automatically try other peers if the leader is lost, enabling fault-tolerant API operations.
 * Timeout can be set on a per-Connection basis to accommodate those with far-flung empires.
 * Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
 * Only a single node needs to be specified in the connection.  **By default gorqlite will talk to that node and figure out the rest of the cluster from its redirects and status API**. This is known as _Cluster Discovery_.
 * Depending on your deployment, **you may wish to disable _Cluster Discovery_**. If you do disable it only the provided URL will be used to communicate with the API instead of discovering the leader and peers and retrying failed requests with different peers. To disable _Cluster Discovery_ add `disableClusterDiscovery=true` as a URL Query Parameter when connecting to rqlite e.g. `http://localhost:14001?disableClusterDiscovery=true`.
-  * This is helpful, for example, when using a Kubernetes service to handle the load balancing of the requests across healthy nodes. 
+  * This is helpful, for example, when using a Kubernetes service to handle the load balancing of the requests across healthy nodes. In such a setup Kubernetes takes care of finding a node to communicate with.
 * Support for several rqlite-specific operations:
   * `Leader()` and `Peers()` to examine the cluster.
   * `SetConsistencyLevel()` can be called at any time on a connection to change the consistency level for future operations.
@@ -34,19 +34,19 @@ This client library is used in production by various groups, including Replicate
 
 ## Examples
 ```go
-// these URLs are just generic database URLs, not rqlite API URLs,
+// These URLs are just generic database URLs, not rqlite API URLs,
 // so you don't need to worry about the various rqlite paths ("/db/query"), etc.
-// just supply the base url and not "db" or anything after it.
+// just supply the base URL and not "db" or anything after it.
 
-// yes, you need the http or https
+// Yes, you need the http or https.
 
-// no, you cannot specify a database name in the URL (this is sqlite, after all).
+// No, you cannot specify a database name in the URL (this is sqlite, after all).
 
 conn, err := gorqlite.Open("http://") // connects to localhost on 4001 without auth
 conn, err := gorqlite.Open("https://") // same but with https
 conn, err := gorqlite.Open("https://localhost:4001/") // same only explicitly
 
-// with auth:
+// With authentication:
 conn, err := gorqlite.Open("https://mary:secret2@localhost:4001/")
 // different server, setting the rqlite consistency level
 conn, err := gorqlite.Open("https://mary:secret2@server1.example.com:4001/?level=none")
@@ -57,12 +57,12 @@ conn, err := gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
 // different port, disabling cluster discovery in the client
 conn, err := gorqlite.Open("https://localhost:2265/?disableClusterDiscovery=true")
 
-// change our minds
+// Change our minds
 conn.SetConsistencyLevel("none")
 conn.SetConsistencyLevel("weak")
 conn.SetConsistencyLevel("strong")
 
-// simulate database/sql Prepare()
+// Simulate database/sql Prepare()
 statements := make ([]string,0)
 pattern := "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (%d, '%s', '%3s')"
 statements = append(statements,fmt.Sprintf(pattern,125718,"Speed Gibson","Speed"))
@@ -209,7 +209,7 @@ seq, err = conn.Queue(...)
 
 ## Important Notes
 
-If you use access control, any user connecting will need the "status" permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the master is lost.
+If you use access control, any user connecting will need the _status_ permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the the connection to the Leader is lost.
 
 rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be sub-optimal.
 
@@ -250,7 +250,7 @@ The following limitations apply when using the rqlite database/sql driver:
 
 ## TODO
 
-https has not been tested yet.  In theory, https should work just fine because it's just a URL to gorqlite, but it has not been.
+HTTPS has not been tested yet.  In theory, HTTP should work just fine because it's just a URL to gorqlite, but it has not been tested.
 
 Several features may be added in the future:
 
@@ -258,11 +258,11 @@ Several features may be added in the future:
 
 - support for expvars (debugvars)
 
-- perhaps deleting a node (the remove API)
+- perhaps deleting a node (via the remove API)
 
 - since connections are just config info, it should be possible to clone them, which would save startup time for new connections.  This needs to be thread-safe, though, since a connection at any time could be updating its cluster info, etc.
 
-- gorqlite always talks to the master (unless it's searching for a master).  In theory, you talk to a non-master in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the default URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
+- gorqlite always talks to the Leader (unless it's searching for a Leader).  In theory, you talk to a Follower in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the default URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
 
 ## Other Design Notes
 
