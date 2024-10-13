@@ -89,7 +89,7 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 
 	if apiOp == api_QUERY || apiOp == api_WRITE || apiOp == api_REQUEST {
 		builder.WriteString("?timings&level=")
-		builder.WriteString(consistencyLevelNames[conn.consistencyLevel])
+		builder.WriteString(consistencyLevelToString[conn.consistencyLevel])
 		if conn.wantsTransactions {
 			builder.WriteString("&transaction")
 		}

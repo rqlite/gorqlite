@@ -22,25 +22,6 @@ import (
 	"strings"
 )
 
-type consistencyLevel int
-
-const (
-	// ConsistencyLevelNone provides no consistency to other nodes.
-	ConsistencyLevelNone consistencyLevel = iota
-	// ConsistencyLevelWeak provides a weak consistency that guarantees the
-	// queries are sent to the leader.
-	ConsistencyLevelWeak
-	// ConsistencyLevelStrong provides a strong consistency and guarantees
-	// that queries are sent and received by other nodes.
-	ConsistencyLevelStrong
-)
-
-// used in several places, actually
-var (
-	consistencyLevelNames map[consistencyLevel]string
-	consistencyLevels     map[string]consistencyLevel
-)
-
 type apiOperation int
 
 const (
@@ -53,16 +34,6 @@ const (
 
 func init() {
 	traceOut = io.Discard
-
-	consistencyLevelNames = make(map[consistencyLevel]string)
-	consistencyLevelNames[ConsistencyLevelNone] = "none"
-	consistencyLevelNames[ConsistencyLevelWeak] = "weak"
-	consistencyLevelNames[ConsistencyLevelStrong] = "strong"
-
-	consistencyLevels = make(map[string]consistencyLevel)
-	consistencyLevels["none"] = ConsistencyLevelNone
-	consistencyLevels["weak"] = ConsistencyLevelWeak
-	consistencyLevels["strong"] = ConsistencyLevelStrong
 }
 
 // Open creates and returns a "connection" to rqlite.
