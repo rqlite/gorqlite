@@ -90,7 +90,7 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.hasBeenClosed {
 		return "", ErrClosed
 	}
-	return consistencyLevelNames[conn.consistencyLevel], nil
+	return consistencyLevelToString[conn.consistencyLevel], nil
 }
 
 // Leader tells the current leader of the cluster
@@ -252,9 +252,9 @@ func (conn *Connection) initConnection(url string) error {
 	// parse query params
 	query := u.Query()
 	if query.Get("level") != "" {
-		cl, ok := consistencyLevels[query.Get("level")]
-		if !ok {
-			return errors.New("invalid consistency level: " + query.Get("level"))
+		cl, err := ParseConsistencyLevel(query.Get("level"))
+		if err != nil {
+			return fmt.Errorf("invalid consistency level: %s %w", query.Get("level"), err)
 		}
 		conn.consistencyLevel = cl
 	}
@@ -294,7 +294,7 @@ func (conn *Connection) initConnection(url string) error {
 	trace("%s:    %s -> %s", conn.ID, "username", conn.username)
 	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
 	trace("%s:    %s -> %s", conn.ID, "host", conn.cluster.leader)
-	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelNames[conn.consistencyLevel])
+	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelToString[conn.consistencyLevel])
 	trace("%s:    %s -> %s", conn.ID, "wantsTransaction", conn.wantsTransactions)
 
 	conn.cluster.conn = conn
