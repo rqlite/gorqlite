@@ -239,7 +239,6 @@ func TestQueueOneParameterized(t *testing.T) {
 }
 
 func TestWrite(t *testing.T) {
-
 	t.Cleanup(func() {
 		wr, err := globalConnection.WriteOne("DROP TABLE IF EXISTS " + testTableName())
 		if err != nil {
