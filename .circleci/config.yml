@@ -9,6 +9,7 @@ jobs:
       - checkout
       - run: go vet .
       - run: go test -timeout 60s -v ./...
+      - run: go test -race -timeout 60s -v ./...
 
 workflows:
   version: 2
