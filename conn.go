@@ -78,6 +78,10 @@ type Connection struct {
 	client http.Client
 }
 
+func (conn *Connection) Client() *http.Client {
+	return &conn.client
+}
+
 // Close will mark the connection as closed. It is safe to be called
 // multiple times.
 func (conn *Connection) Close() {
