@@ -27,6 +27,10 @@ const (
 	defaultDisableClusterDiscovery = false
 )
 
+var DefaultHttpClient = &http.Client{
+	Timeout: defaultTimeout * time.Second,
+}
+
 var (
 	// ErrClosed indicates that client connection was closed
 	ErrClosed = errors.New("gorqlite: connection is closed")
@@ -75,11 +79,7 @@ type Connection struct {
 	hasBeenClosed bool   //   false
 	ID            string //   generated in init()
 
-	client http.Client
-}
-
-func (conn *Connection) Client() *http.Client {
-	return &conn.client
+	client *http.Client
 }
 
 // Close will mark the connection as closed. It is safe to be called
@@ -272,22 +272,19 @@ func (conn *Connection) initConnection(url string) error {
 		conn.disableClusterDiscovery = dpd
 	}
 
-	timeout := defaultTimeout
 	if query.Get("timeout") != "" {
 		customTimeout, err := strconv.Atoi(query.Get("timeout"))
 		if err != nil {
 			return errors.New("invalid timeout specified: " + err.Error())
 		}
-		timeout = customTimeout
+		DefaultHttpClient.Timeout = time.Second * time.Duration(customTimeout)
 	}
 
 	// Default transaction state
 	conn.wantsTransactions = true
 
 	// Initialize http client for connection
-	conn.client = http.Client{
-		Timeout: time.Second * time.Duration(timeout),
-	}
+	conn.client = DefaultHttpClient
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
 	if conn.wantsHTTPS {
