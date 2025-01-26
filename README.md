@@ -205,6 +205,21 @@ seq, err = conn.QueueOne("CREATE TABLE " + testTableName() + " (id integer, name
 seq, err = conn.Queue(...)
 ```
 
+### Controlling HTTP communications
+If you need full control over the HTTP connection rqlite, you can pass in a custom HTTP client object. This can be useful if you wish to control certification verification, configure Certificate Authorities, or enable mutual TLS.
+```go
+// Create a TLS transport which skips verification of certificates.
+tn := &http.Transport{
+    TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+}
+
+// Create the HTTP client and pass to the library.
+client := &http.Client{Transport: tn}
+conn, err := gorqlite.OpenWithClient("https://localhost:4001/", client)
+
+// Use conn object as normal.
+```
+
 ## Important Notes
 
 If you use access control, any user connecting will need the _status_ permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the the connection to the Leader is lost.

@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 )
 
@@ -36,7 +37,8 @@ func init() {
 	traceOut = io.Discard
 }
 
-// Open creates and returns a "connection" to rqlite.
+// Open creates and returns a "connection" to rqlite. using
+// the default HTTP client.
 //
 // Since rqlite is stateless, there is no actual connection.
 // Open() creates and initializes a gorqlite Connection type,
@@ -55,6 +57,14 @@ func init() {
 //	https://mary:secret2@somewhere.example.com:1234
 //	https://mary:secret2@somewhere.example.com // will use 4001
 func Open(connURL string) (*Connection, error) {
+	return OpenWithClient(connURL, DefaultHTTPClient)
+}
+
+// OpenWithClient creates and returns a "connection" to rqlite,
+// and uses the given HTTP client for all connections to rqlite.
+// This allows clients to have complete conntrol over the HTTP
+// communications between this client and the rqlite system.
+func OpenWithClient(connURL string, client *http.Client) (*Connection, error) {
 	var conn = &Connection{}
 
 	// generate our uuid for trace
@@ -70,7 +80,7 @@ func Open(connURL string) (*Connection, error) {
 	conn.hasBeenClosed = false
 
 	// parse the URL given
-	err = conn.initConnection(connURL)
+	err = conn.initConnection(connURL, client)
 	if err != nil {
 		return conn, err
 	}

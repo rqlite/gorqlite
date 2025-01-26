@@ -27,6 +27,10 @@ const (
 	defaultDisableClusterDiscovery = false
 )
 
+var DefaultHTTPClient = &http.Client{
+	Timeout: defaultTimeout * time.Second,
+}
+
 var (
 	// ErrClosed indicates that client connection was closed
 	ErrClosed = errors.New("gorqlite: connection is closed")
@@ -166,12 +170,14 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 }
 
 // initConnection takes the initial connection URL specified by
-// the user, and parses it into a peer.  This peer is assumed to
-// be the leader.  The next thing Open() does is updateClusterInfo()
+// the user, and a HTTP client. The URL is parsed to determine
+// the peer's addresss. This peer is assumed to be the leader.
+// The next thing Open() does is updateClusterInfo()
 // so the truth will be revealed soon enough.
 //
 // initConnection() does not talk to rqlite.  It only parses the
-// connection URL and prepares the new connection for work.
+// connection URL and prepares the new connection for work. If
+// the HTTP client is nil, then the default client is used.
 //
 // URL format:
 //
@@ -198,7 +204,7 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //	hostname                    "localhost"
 //	port                        "4001"
 //	consistencyLevel            "weak"
-func (conn *Connection) initConnection(url string) error {
+func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
 	// do some sanity checks.  You know users.
 
 	if len(url) < 7 {
@@ -281,8 +287,10 @@ func (conn *Connection) initConnection(url string) error {
 	conn.wantsTransactions = true
 
 	// Initialize http client for connection
-	conn.client = http.Client{
-		Timeout: time.Second * time.Duration(timeout),
+	if httpClient == nil {
+		conn.client = http.Client{
+			Timeout: time.Second * time.Duration(timeout),
+		}
 	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
