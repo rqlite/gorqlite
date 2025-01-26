@@ -215,7 +215,7 @@ tn := &http.Transport{
 
 // Create the HTTP client and pass to the library.
 client := &http.Client{Transport: tn}
-conn, err := gorqlite.OpenWithClient("https://localhost:4001/")
+conn, err := gorqlite.OpenWithClient("https://localhost:4001/", client)
 
 // Use conn object as normal.
 ```
