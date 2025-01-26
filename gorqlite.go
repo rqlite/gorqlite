@@ -37,7 +37,7 @@ func init() {
 	traceOut = io.Discard
 }
 
-// Open creates and returns a "connection" to rqlite. using
+// Open creates and returns a "connection" to rqlite, using
 // the default HTTP client.
 //
 // Since rqlite is stateless, there is no actual connection.
