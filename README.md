@@ -55,6 +55,12 @@ conn, err := gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
 // different port, disabling cluster discovery in the client
 conn, err := gorqlite.Open("https://localhost:2265/?disableClusterDiscovery=true")
 
+// With your own HTTP client, allowing full control over the HTTP configuration.
+// This is useful for skipping verification of certificates, enabling mutual TLS,
+// or set specific timeouts.
+client := &http.Client{}
+conn, err := gorqlite.OpenWithClient("https://mary:secret2@localhost:4001/", client)
+
 // Change our minds
 conn.SetConsistencyLevel("none")
 conn.SetConsistencyLevel("weak")
