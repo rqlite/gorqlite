@@ -170,12 +170,14 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 }
 
 // initConnection takes the initial connection URL specified by
-// the user, and parses it into a peer.  This peer is assumed to
-// be the leader.  The next thing Open() does is updateClusterInfo()
+// the user, and a HTTP client. The URL is parsed to determine
+// the peer's addresss. This peer is assumed to be the leader.
+// The next thing Open() does is updateClusterInfo()
 // so the truth will be revealed soon enough.
 //
 // initConnection() does not talk to rqlite.  It only parses the
-// connection URL and prepares the new connection for work.
+// connection URL and prepares the new connection for work. If
+// the HTTP client is nil, then the default client is used.
 //
 // URL format:
 //
