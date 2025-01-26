@@ -70,7 +70,7 @@ func Open(connURL string) (*Connection, error) {
 	conn.hasBeenClosed = false
 
 	// parse the URL given
-	err = conn.initConnection(connURL)
+	err = conn.initConnection(connURL, nil)
 	if err != nil {
 		return conn, err
 	}

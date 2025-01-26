@@ -27,6 +27,10 @@ const (
 	defaultDisableClusterDiscovery = false
 )
 
+var DefaultHTTPClient = &http.Client{
+	Timeout: defaultTimeout * time.Second,
+}
+
 var (
 	// ErrClosed indicates that client connection was closed
 	ErrClosed = errors.New("gorqlite: connection is closed")
@@ -198,7 +202,7 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //	hostname                    "localhost"
 //	port                        "4001"
 //	consistencyLevel            "weak"
-func (conn *Connection) initConnection(url string) error {
+func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
 	// do some sanity checks.  You know users.
 
 	if len(url) < 7 {
@@ -281,8 +285,10 @@ func (conn *Connection) initConnection(url string) error {
 	conn.wantsTransactions = true
 
 	// Initialize http client for connection
-	conn.client = http.Client{
-		Timeout: time.Second * time.Duration(timeout),
+	if httpClient == nil {
+		conn.client = http.Client{
+			Timeout: time.Second * time.Duration(timeout),
+		}
 	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
