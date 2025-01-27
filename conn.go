@@ -287,7 +287,8 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	conn.wantsTransactions = true
 
 	// Initialize http client for connection
-	if httpClient == nil {
+	conn.client = httpClient
+	if conn.client == nil {
 		conn.client = http.Client{
 			Timeout: time.Second * time.Duration(timeout),
 		}
