@@ -79,7 +79,7 @@ type Connection struct {
 	hasBeenClosed bool   //   false
 	ID            string //   generated in init()
 
-	client http.Client
+	client *http.Client
 }
 
 // Close will mark the connection as closed. It is safe to be called
@@ -287,8 +287,9 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	conn.wantsTransactions = true
 
 	// Initialize http client for connection
-	if httpClient == nil {
-		conn.client = http.Client{
+	conn.client = httpClient
+	if conn.client == nil {
+		conn.client = &http.Client{
 			Timeout: time.Second * time.Duration(timeout),
 		}
 	}
