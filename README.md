@@ -212,7 +212,7 @@ seq, err = conn.Queue(...)
 ```
 
 ### Controlling HTTP communications
-If you need full control over the HTTP connection rqlite, you can pass in a custom HTTP client object. This can be useful if you wish to control certification verification, configure Certificate Authorities, or enable mutual TLS.
+If you need full control over the HTTP connection to rqlite, you can pass in a custom HTTP client object. This can be useful if you wish to control certification verification, configure Certificate Authorities, or enable mutual TLS.
 
 For example, say you wish this library to skip verification of any certificates presented by rqlite:
 ```go
