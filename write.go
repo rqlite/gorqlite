@@ -123,8 +123,8 @@ func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatemen
 	return conn.WriteParameterizedContext(context.Background(), sqlStatements)
 }
 
-func (conn *Connection) parseWriteResult(thisResult map[string]interface{}) WriteResult {
-	var wr WriteResult
+func (conn *Connection) ParseWriteResult(thisResult map[string]interface{}) WriteResult {
+	var wr = WriteResult{conn: conn}
 
 	// did we get an error?
 	_, ok := thisResult["error"]
@@ -208,8 +208,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	var errs []error
 	for n, k := range resultsArray {
 		trace("%s: starting on result %d", conn.ID, n)
-		wr := conn.parseWriteResult(k.(map[string]interface{}))
-		wr.conn = conn
+		wr := conn.ParseWriteResult(k.(map[string]interface{}))
 		results = append(results, wr)
 		if wr.Err != nil {
 			errs = append(errs, wr.Err)
