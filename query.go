@@ -200,7 +200,10 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 }
 
 func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) QueryResult {
-	var qr QueryResult
+	var qr = QueryResult{
+		conn:      conn,
+		rowNumber: -1,
+	}
 
 	// did we get an error?
 	_, ok := thisResult["error"]
@@ -230,8 +233,6 @@ func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) Quer
 	} else {
 		trace("%s: fyi, no values this query", conn.ID)
 	}
-
-	qr.rowNumber = -1
 
 	trace("%s: this result (#col,time) %d %f", conn.ID, len(qr.columns), qr.Timing)
 
@@ -295,7 +296,6 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	for n, r := range resultsArray {
 		trace("%s: parsing result %d", conn.ID, n)
 		qr := conn.parseQueryResult(r.(map[string]interface{}))
-		qr.conn = conn
 		results = append(results, qr)
 		if qr.Err != nil {
 			errs = append(errs, qr.Err)

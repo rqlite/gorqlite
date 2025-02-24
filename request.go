@@ -148,11 +148,9 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 		if hasValues || hasColumns {
 			// Presence of these keys means this is a query result
 			qr := conn.parseQueryResult(thisResult)
-			qr.conn = conn
 			thisR.Query = &qr
 		} else {
 			wr := conn.parseWriteResult(thisResult)
-			wr.conn = conn
 			thisR.Write = &wr
 		}
 		results = append(results, thisR)
