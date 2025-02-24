@@ -199,7 +199,7 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 	return conn.QueryParameterizedContext(context.Background(), sqlStatements)
 }
 
-func (conn *Connection) ParseQueryResult(thisResult map[string]interface{}) QueryResult {
+func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) QueryResult {
 	var qr = QueryResult{
 		conn:      conn,
 		rowNumber: -1,
@@ -295,7 +295,7 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	var errs []error
 	for n, r := range resultsArray {
 		trace("%s: parsing result %d", conn.ID, n)
-		qr := conn.ParseQueryResult(r.(map[string]interface{}))
+		qr := conn.parseQueryResult(r.(map[string]interface{}))
 		results = append(results, qr)
 		if qr.Err != nil {
 			errs = append(errs, qr.Err)
