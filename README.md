@@ -1,323 +1,269 @@
-# gorqlite - a Go client for rqlite
+# gorqlite — a Go client for rqlite
 [![Circle CI](https://circleci.com/gh/rqlite/gorqlite/tree/master.svg?style=svg)](https://circleci.com/gh/rqlite/gorqlite/tree/master)
 
-gorqlite is a Go client for rqlite that provides easy-to-use abstractions for working with the rqlite API.
+gorqlite is a Go client for [rqlite](https://github.com/rqlite/rqlite). It hides the HTTP/JSON details and exposes a small API specialized for rqlite, plus a thin `database/sql` driver.
 
-It provides an idiomatic API specialized for rqlite and a database/sql driver (read below for more information on it). The main API provides similar semantics to database/sql, such as `Open()`, `Query()` and `QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()` and `WriteOne()`, etc.
-> If you're looking for a simpler Go client library, which provides a thin, easy-to-use and more robust abstraction for accessing rqlite, check out https://github.com/rqlite/rqlite-go-http.
+The main API mirrors a subset of `database/sql` semantics — `Open()`, `Query()`/`QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()`/`WriteOne()` — without pretending to be a full `database/sql` driver.
+
+> Looking for an even smaller wrapper? See [rqlite/rqlite-go-http](https://github.com/rqlite/rqlite-go-http).
 
 ## Status
 
-This client library is used in production by various groups, including Replicated. Check out [their blog post](https://www.replicated.com/blog/app-manager-with-rqlite) on their use of rqlite.
+Used in production by various groups, including [Replicated](https://www.replicated.com/blog/app-manager-with-rqlite).
 
 ## Features
 
-* Abstracts the rqlite HTTP API interaction - the POSTs, JSON handling, etc.  You submit your SQL and get back an iterator with familiar database/sql semantics (`Next()`, `Scan()`, etc.) or a `map[column name as string]interface{}`.
-* Timings and other metadata (e.g., num rows affected, last insert ID, etc.) are conveniently available and parsed into appropriate types.
-* A connection abstraction allows gorqlite to discover and remember the rqlite leader.  gorqlite will automatically try other peers if the leader is lost, enabling fault-tolerant API operations.
-* Timeout can be set on a per-Connection basis to accommodate those with far-flung empires.
-* Use familiar database URL connection strings to connection, optionally including rqlite authentication and/or specific rqlite consistency levels.
-* Only a single node needs to be specified in the connection.  **By default gorqlite will talk to that node and figure out the rest of the cluster from its redirects and status API**. This is known as _Cluster Discovery_.
-* Depending on your deployment, **you may wish to disable _Cluster Discovery_**. If you do disable it only the provided URL will be used to communicate with the API instead of discovering the leader and peers and retrying failed requests with different peers. To disable _Cluster Discovery_ add `disableClusterDiscovery=true` as a URL Query Parameter when connecting to rqlite e.g. `http://localhost:14001?disableClusterDiscovery=true`.
-  * This is helpful, for example, when using a Kubernetes service to handle the load balancing of the requests across healthy nodes. In such a setup Kubernetes takes care of finding a node to communicate with.
-* Support for several rqlite-specific operations:
-  * `Leader()` and `Peers()` to examine the cluster.
-  * `SetConsistencyLevel()` can be called at any time on a connection to change the consistency level for future operations.
-  * `Timing` can be referenced on a per-result basis to retrieve the timings information for executed operations as float64, per the rqlite API. 
-* `Trace(io.Writer)`/`Trace(nil)` can be used to turn on/off debugging information on everything gorqlite does to a io.Writer of your choice.
-* No external dependencies. Uses only standard library functions.
+- Speaks rqlite's HTTP API for you: POSTs, JSON, parameterized statements, the unified `/db/request` endpoint, and queued writes.
+- Iterator with `database/sql`-style ergonomics (`Next()`, `Scan()`, `Map()`), plus typed `Null*` wrappers (`NullString`, `NullInt64`, …).
+- Per-result metadata: timing, rows affected, last insert id.
+- **Cluster discovery**: gorqlite probes `/status` (and `/nodes` on rqlite 6+) so you only need to point at one node. Failed requests are retried against the rest of the cluster.
+- Disable discovery with `?disableClusterDiscovery=true` on the connection URL — useful when a load balancer (e.g. a Kubernetes Service) already handles peer selection.
+- URL-style connection strings with optional credentials, consistency level, and timeout.
+- `Context` variants of every API method.
+- `Leader()` / `Peers()` for cluster introspection; `SetConsistencyLevel()` / `SetExecutionWithTransaction()` for tuning.
+- `TraceOn(io.Writer)` / `TraceOff()` for verbose request/response tracing.
+- No external dependencies — standard library only.
 
 ## Install
 
-`go get github.com/rqlite/gorqlite`
+```sh
+go get github.com/rqlite/gorqlite
+```
 
-## Examples
+## Quick start
+
 ```go
-// These URLs are just generic database URLs, not rqlite API URLs,
-// so you don't need to worry about the various rqlite paths ("/db/query"), etc.
-// just supply the base URL and not "db" or anything after it.
+conn, err := gorqlite.Open("http://")              // localhost:4001, no auth
+conn, err  = gorqlite.Open("https://")             // same, https
+conn, err  = gorqlite.Open("https://localhost:4001/")
 
-// Yes, you need the http or https.
+// With credentials and options.
+conn, err  = gorqlite.Open("https://mary:secret2@localhost:4001/")
+conn, err  = gorqlite.Open("https://server.example.com:4001/?level=weak")
+conn, err  = gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
+conn, err  = gorqlite.Open("https://localhost:2265/?disableClusterDiscovery=true")
 
-// No, you cannot specify a database name in the URL (this is sqlite, after all).
-
-conn, err := gorqlite.Open("http://") // connects to localhost on 4001 without auth
-conn, err := gorqlite.Open("https://") // same but with https
-conn, err := gorqlite.Open("https://localhost:4001/") // same only explicitly
-
-// With authentication:
-conn, err := gorqlite.Open("https://mary:secret2@localhost:4001/")
-// different server, setting the rqlite consistency level
-conn, err := gorqlite.Open("https://mary:secret2@server1.example.com:4001/?level=none")
-// same without auth, setting the rqlite consistency level
-conn, err := gorqlite.Open("https://server2.example.com:4001/?level=weak")
-// different port, setting the rqlite consistency level and timeout
-conn, err := gorqlite.Open("https://localhost:2265/?level=strong&timeout=30")
-// different port, disabling cluster discovery in the client
-conn, err := gorqlite.Open("https://localhost:2265/?disableClusterDiscovery=true")
-
-// With your own HTTP client, allowing full control over the HTTP configuration.
-// This is useful for skipping verification of certificates, enabling mutual TLS,
-// or set specific timeouts.
+// Provide your own *http.Client when you need control over TLS, proxies, etc.
 client := &http.Client{}
-conn, err := gorqlite.OpenWithClient("https://mary:secret2@localhost:4001/", client)
+conn, err = gorqlite.OpenWithClient("https://mary:secret2@localhost:4001/", client)
 
-// Change our minds
-conn.SetConsistencyLevel("none")
-conn.SetConsistencyLevel("weak")
-conn.SetConsistencyLevel("strong")
+// Adjust the consistency level after opening.
+conn.SetConsistencyLevel(gorqlite.ConsistencyLevelNone)
+conn.SetConsistencyLevel(gorqlite.ConsistencyLevelWeak)
+conn.SetConsistencyLevel(gorqlite.ConsistencyLevelStrong)
+```
 
-// Simulate database/sql Prepare()
-statements := make ([]string,0)
-pattern := "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (%d, '%s', '%3s')"
-statements = append(statements,fmt.Sprintf(pattern,125718,"Speed Gibson","Speed"))
-statements = append(statements,fmt.Sprintf(pattern,209166,"Clint Barlow","Clint"))
-statements = append(statements,fmt.Sprintf(pattern,44107,"Barney Dunlap","Barney"))
+### Writes
+
+```go
+statements := []string{
+    "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (125718, 'Speed Gibson', 'Speed')",
+    "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (209166, 'Clint Barlow', 'Clint')",
+    "INSERT INTO secret_agents(id, hero_name, abbrev) VALUES (44107,  'Barney Dunlap', 'Barney')",
+}
 results, err := conn.Write(statements)
-
-// now we have an array of []WriteResult 
-
-for n, v := range WriteResult {
-	fmt.Printf("for result %d, %d rows were affected\n",n,v.RowsAffected)
-	if v.Err != nil {
-		fmt.Printf("   we have this error: %s\n",v.Err.Error())
-	}
+for n, r := range results {
+    fmt.Printf("result %d: %d rows affected\n", n, r.RowsAffected)
+    if r.Err != nil {
+        fmt.Printf("  error: %s\n", r.Err)
+    }
 }
 
-// or if we have an auto_increment column
-res, err := conn.WriteOne("INSERT INTO foo (name) values ('bar')")
-fmt.Printf("last insert id was %d\n",res.LastInsertID)
+// Single statement, with auto-increment.
+res, err := conn.WriteOne("INSERT INTO foo (name) VALUES ('bar')")
+fmt.Printf("last insert id: %d\n", res.LastInsertID)
+```
 
-// just like database/sql, you're required to Next() before any Scan() or Map()
+### Queries
 
-// note that rqlite is only going to send JSON types - see the encoding/json docs
-// which means all numbers are float64s.  gorqlite will convert to int64s for you
-// because it is convenient but other formats you will have to handle yourself
+rqlite returns JSON, so numbers come back as `float64`; gorqlite will convert to `int64` for you when you `Scan()` into one. Other types you handle yourself.
 
-var id int64
-var name string
-rows, err := conn.QueryOne("select id, name from secret_agents where id > 500")
-fmt.Printf("query returned %d rows\n",rows.NumRows)
+```go
+rows, err := conn.QueryOne("SELECT id, name FROM secret_agents WHERE id > 500")
+fmt.Printf("query returned %d rows\n", rows.NumRows())
+
+var (
+    id   int64
+    name string
+)
 for rows.Next() {
-	err := rows.Scan(&id, &name)
-	fmt.Printf("this is row number %d\n",rows.RowNumber)
-	fmt.Printf("there are %d rows overall%d\n",rows.NumRows)
+    if err := rows.Scan(&id, &name); err != nil {
+        // ...
+    }
+    fmt.Printf("row %d: id=%d name=%q\n", rows.RowNumber(), id, name)
 }
+```
 
-// just like WriteOne()/Write(), QueryOne() takes a single statement,
-// while Query() takes a []string.  You'd only use Query() if you wanted
-// to transactionally group a bunch of queries, and then you'd get back
-// a []QueryResult
+`QueryOne` takes a single statement; `Query([]string)` runs many in one transaction and returns `[]QueryResult`.
 
-// alternatively, use Next()/Map()
+`Map()` is an alternative to `Scan()`:
 
+```go
 for rows.Next() {
-	m, err := rows.Map()
-	// m is now a map[column name as string]interface{}
-	id := m["name"].(float64) // the only json number type
-	name := m["name"].(string)
+    m, err := rows.Map() // map[columnName]interface{}
+    id   := int64(m["id"].(float64)) // JSON numbers decode as float64
+    name := m["name"].(string)
+    _, _ = id, name
 }
+```
 
-// get rqlite cluster information
-leader, err := conn.Leader()
-// err could be set if the cluster wasn't answering, etc.
-fmt.Println("current leader is"leader)
-peers, err := conn.Peers()
-for n, p := range peers {
-	fmt.Printf("cluster peer %d: %s\n",n,p)
-}
+### Parameterized statements
 
-// turn on debug tracing to the io.Writer of your choice.
-// gorqlite will verbosely write very granular debug information.
-// this is similar to perl's DBI->Trace() facility.
-// note that this is done at the package level, not the connection
-// level, so you can debug Open() etc. if need be.
+```go
+wr, err := conn.WriteOneParameterized(gorqlite.ParameterizedStatement{
+    Query:     "INSERT INTO secret_agents(id, name, secret) VALUES (?, ?, ?)",
+    Arguments: []interface{}{7, "James Bond", "not-a-secret"},
+})
 
-f, err := os.OpenFile("/tmp/deep_insights.log",OS_RDWR|os.O_CREATE|os.O_APPEND,0644)
-gorqlite.TraceOn(f)
+qr, err := conn.QueryOneParameterized(gorqlite.ParameterizedStatement{
+    Query:     "SELECT id, name FROM secret_agents WHERE id > ?",
+    Arguments: []interface{}{3},
+})
+```
 
-// change my mind and watch the trace
-gorqlite.TraceOn(os.Stderr)
+Batch variants: `WriteParameterized`, `QueryParameterized`, `QueueParameterized`. Every method also has a `…Context` variant that takes a `context.Context`.
 
-// turn off
-gorqlite.TraceOff()
+### Unified endpoint
 
-// using parameterized statements
-wr, err := conn.WriteParameterized(
-	[]gorqlite.ParameterizedStatement{
-		{
-			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-			Arguments: []interface{}{7, "James Bond", "not-a-secret"},
-		},
-	},
-)
-seq, err := conn.QueueParameterized(
-	[]gorqlite.ParameterizedStatement{
-		{
-			Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-			Arguments: []interface{}{7, "James Bond", "not-a-secret"},
-		},
-	},
-)
-qr, err := conn.QueryParameterized(
-	[]gorqlite.ParameterizedStatement{
-		{
-			Query:     "SELECT id, name from secret_agents where id > ?",
-			Arguments: []interface{}{3},
-		},
-	},
-)
+`Request` / `RequestParameterized` send a mixed batch of reads and writes to rqlite's `/db/request`. The result for each statement carries either a `*QueryResult` or a `*WriteResult`.
 
-// alternatively
-wr, err := conn.WriteOneParameterized(
-	gorqlite.ParameterizedStatement{
-		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-		Arguments: []interface{}{7, "James Bond", "not-a-secret"},
-	},
-)
-seq, err := conn.QueueOneParameterized(
-	gorqlite.ParameterizedStatement{
-		Query:     "INSERT INTO secret_agents(id, name, secret) VALUES(?, ?, ?)",
-		Arguments: []interface{}{7, "James Bond", "not-a-secret"},
-	},
-)
-qr, err := conn.QueryOneParameterized(
-	gorqlite.ParameterizedStatement{
-		Query:     "SELECT id, name from secret_agents where id > ?",
-		Arguments: []interface{}{3},
-	},
-)
+```go
+results, err := conn.Request([]string{
+    "INSERT INTO secret_agents(id, name) VALUES (8, 'Felix')",
+    "SELECT COUNT(*) FROM secret_agents",
+})
+```
 
-// using nullable types
+### Queued writes
+
+[Queued writes](https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md) are fire-and-forget batched writes. They return a sequence number, not per-statement results.
+
+```go
+seq, err := conn.QueueOne("INSERT INTO secret_agents(id, name) VALUES (1, 'Q')")
+seq, err  = conn.Queue([]string{ /* ... */ })
+```
+
+### Nullable types
+
+```go
 var name gorqlite.NullString
-rows, err := conn.QueryOne("select name from secret_agents where id = 7")
+rows, err := conn.QueryOne("SELECT name FROM secret_agents WHERE id = 7")
 for rows.Next() {
-	err := rows.Scan(&name)
+    _ = rows.Scan(&name)
 }
 if name.Valid {
-	// use name.String
-} else {
-	// NULL value
+    // use name.String
 }
-
 ```
 
-### Queued Writes
-The client does support [Queued Writes](https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md). Instead of calling the `Write()` functions, call the queueing versions instead.
-```go
-var seq int64
-var err error
+Also: `NullInt64`, `NullInt32`, `NullInt16`, `NullFloat64`, `NullBool`, `NullTime`.
 
-seq, err = conn.QueueOne("CREATE TABLE " + testTableName() + " (id integer, name text)")
-seq, err = conn.Queue(...)
+### Cluster info
+
+```go
+leader, err := conn.Leader()
+fmt.Println("current leader:", leader)
+
+peers, err := conn.Peers()
+for n, p := range peers {
+    fmt.Printf("peer %d: %s\n", n, p)
+}
 ```
 
-### Controlling HTTP communications
-If you need full control over the HTTP connection to rqlite, you can pass in a custom HTTP client object. This can be useful if you wish to control certification verification, configure Certificate Authorities, or enable mutual TLS.
+### Tracing
 
-For example, say you wish this library to skip verification of any certificates presented by rqlite:
 ```go
-// Create a TLS transport which skips verification of certificates.
+f, err := os.OpenFile("/tmp/gorqlite.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+gorqlite.TraceOn(f)
+// ... or to stderr:
+gorqlite.TraceOn(os.Stderr)
+gorqlite.TraceOff()
+```
+
+Tracing is a package-level switch, so it covers `Open()` too. Credentials in URLs are redacted in trace output.
+
+### Custom HTTP client
+
+Pass your own `*http.Client` when you need to control TLS, certificate verification, or any other transport detail:
+
+```go
 tn := &http.Transport{
     TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 }
-
-// Create the HTTP client and pass to the library.
 client := &http.Client{Transport: tn}
 conn, err := gorqlite.OpenWithClient("https://localhost:4001/", client)
-
-// Use conn object as normal.
 ```
 
-## Important Notes
+## Notes
 
-If you use access control, any user connecting will need the _status_ permission in addition to any other needed permission.  This is so gorqlite can query the cluster and try other peers if the the connection to the Leader is lost.
+- If your rqlite cluster has access control enabled, the connecting user needs the **`status`** permission in addition to the usual `query`/`execute` permissions, so gorqlite can query cluster topology and fail over.
+- rqlite does not stream results — a query returns the entire result set at once. Plan for large datasets accordingly.
+- `Leader()` and `Peers()` each refresh cluster info before returning. Calling them in sequence can produce slightly inconsistent answers if the cluster changes between calls.
+- `Open()` connects immediately (unlike `database/sql`'s `Open`) so that cluster discovery can run before you submit any work.
 
-rqlite does not support iterative fetching from the DBMS, so your query will put all results into memory immediately.  If you are working with large datasets on small systems, your experience may be sub-optimal.
+## `database/sql` driver
 
-## Driver for database/sql
-
-It is recommended that you use the main gorqlite-specific API when possible. However, if you need to use gorqlite with database/sql, you can import `github.com/rqlite/gorqlite/stdlib`. For example:
+Prefer the native gorqlite API when you can. If you need `database/sql`, import the side-effect package `github.com/rqlite/gorqlite/stdlib`:
 
 ```go
 package main
 
 import (
-	"database/sql"
+    "database/sql"
 
-	_ "github.com/rqlite/gorqlite/stdlib"
+    _ "github.com/rqlite/gorqlite/stdlib"
 )
 
 func main() {
-	db, err := sql.Open("rqlite", "http://")
-	if err != nil {
-		panic(err)
-	}
-	_, err := db.Exec("CREATE TABLE users (id INTEGER, name TEXT)")
-	if err != nil {
-		panic(err)
-	}
+    db, err := sql.Open("rqlite", "http://")
+    if err != nil {
+        panic(err)
+    }
+    if _, err = db.Exec("CREATE TABLE users (id INTEGER, name TEXT)"); err != nil {
+        panic(err)
+    }
 }
 ```
 
-The following limitations apply when using the rqlite database/sql driver:
+Driver limitations:
 
-* rqlite supports transactions, but only in a single batch.  You can group many statements into a single transaction, but you must submit them as a single unit.  You cannot start a transaction, send some statements, come back later and submit some more, and then later commit.
+- rqlite supports transactions only as a single submitted batch — there is no open-then-extend-then-commit flow, and no rollback.
+- The SQLite C-level prepare/bind API isn't exposed by rqlite, so true `Prepare()` doesn't exist.
+- `Begin()`, `Commit()`, `Rollback()`, and `Prepare()` are therefore no-ops.
 
-* As a consequence, there is no rollback.
+## Concurrency
 
-* The statement parsing/preparation API is not exposed at the SQL layer by sqlite, and hence it's not exposed by rqlite.  What this means is that there's no way to prepare a statement (`"INSERT INTO superheroes (?,?)"`) and then later bind executions to it.  (In case you're wondering, yes, it would be possible for gorqlite to include a copy of sqlite3 and use its engine, but the sqlite C call to `sqlite3_prepare_v2()` will fail because a local sqlite3 won't know your DB's schemas and the `sqlite3_prepare_v2()` call validates the statement against the schema.  We could open the local sqlite .db file maintained by rqlite and validate against that, but there is no way to make a consistency guarantee between time of preparation and execution, especially since the user can mix DDL and DML in a single transaction).
+`*Connection` is safe to use from multiple goroutines: all configuration changes (`SetConsistencyLevel`, `SetExecutionWithTransaction`, `Close`) and the request methods are guarded internally.
 
-* Therefore, `Begin()`, `Rollback()`, `Commit()`, and `Prepare()` are all no-ops that return no errors but don't do anything.
-
-## TODO
-
-HTTPS has not been tested yet.  In theory, HTTP should work just fine because it's just a URL to gorqlite, but it has not been tested.
-
-Several features may be added in the future:
-
-- support for the backup API
-
-- support for expvars (debugvars)
-
-- perhaps deleting a node (via the remove API)
-
-- since connections are just config info, it should be possible to clone them, which would save startup time for new connections.  This needs to be thread-safe, though, since a connection at any time could be updating its cluster info, etc.
-
-- gorqlite always talks to the Leader (unless it's searching for a Leader).  In theory, you talk to a Follower in "none" consistency mode, but this adds a surprising amount of complexity.  gorqlite has to take note of the URL you call it with, then try to match that to the cluster's list to mark it as the "default" URL.  Then whenever it wants to do an operation, it has to carefully sort the peer list based on the consistency model, if the default URL has gone away, etc.  And when cluster info is rebuilt, it has to track the default URL through that.
-
-## Other Design Notes
-
-In standard `database/sql` drivers, `Open()` doesn't actually do anything.  You get a "connection" that doesn't connect until you `Ping()` or send actual work.  In gorqlite's case, it needs to connect to get cluster information, so this is done immediately and automatically open calling `Open()`.  By the time `Open()` is returned, gorqlite has full cluster info.
-
-Unlike `database/sql` connections, a gorqlite connection in the main gorqlite-specific API is not thread-safe. However, a gorqlite database/sql connection through package `stdlib` *is* thread-safe.
-
-`Close()` will set a flag so if you try to use the connection afterwards, it will fail.  But otherwise, you can merrily let your connections be garbage-collected with no harm, because they're just configuration tracking bundles and everything to the rqlite cluster is stateless.  Indeed, the true reason that `Close()` exists is the author's feeling that if you open something, you should be able to close it.  So why not `GetConnection()` then instead of `Open()`?  Or `GetClusterConfigurationTrackingObject()`?  I don't know.  Fork me.
-
-`Leader()` and `Peers()` will both cause gorqlite to reverify its cluster information before return.  Note that if you call `Leader()` and then `Peers()` and something changes in between, it's possible to get inconsistent answers.
-
-Since "weak" consistency is the default rqlite level, it is the default level for the client as well.  The user can change this at will (either in the connection string or via `SetConsistencyLevel()`, and then the new level will apply to all future calls).
+A `*QueryResult` is a stateful iterator — `Next()`, `Scan()`, `Map()` mutate the row cursor. Don't share a single `QueryResult` across goroutines without your own synchronization.
 
 ## Tests
 
-`go test` is used for testing.  A running cluster is required.
+`go test ./...`. A running rqlite cluster is required.
 
-By default, gorqlite uses this config for testing:
+Defaults:
 
-	database URL : http://localhost:4001
-	table name   : gorqlite_test
+```
+url:               http://localhost:4001
+table (main):      gorqlite_test
+table (stdlib):    gorqlite_test_stdlib
+```
 
-Also, the tests in package stdlib use the same config but a table name of `gorqlite_test_stdlib`.
+Override via environment:
 
-These can overridden using the environment variables:
+```
+GORQLITE_TEST_URL=https://user:password@somewhere.example.com:1234
+GORQLITE_TEST_TABLE=some_other_table
+GORQLITE_TEST_TABLE_STDLIB=some_other_table
+```
 
-	GORQLITE_TEST_URL=https://somewhere.example.com:1234
-	GORQLITE_TEST_URL=https//user:password@somewhere.example.com:1234
-	etc.
+## Possible future work
 
-	GORQLITE_TEST_TABLE=some_other_table
-	GORQLITE_TEST_TABLE_STDLIB=some_other_table
+- Backup API support.
+- expvars / debugvars.
+- Node removal API.
+- "none" consistency reads sent to followers (currently always routed to the leader, except during leader discovery).
 
 ## Pronunciation
-rqlite is supposed to be pronounced "ree qwell lite" (though many people pronounce is "R Q lite" too).  So you could pronounce gorqlite as either "go ree kwell lite" or "gork lite".  The Klingon in me prefers the latter.  Really, isn't rqlite just the kind of battle-hardened, lean and mean system Klingons would use?  **Qapla'!**
 
+rqlite is "ree-qwell-lite" (or "R-Q-lite", depending on who you ask). gorqlite is "go-ree-kwell-lite" or "gork-lite". The Klingon in me prefers the latter — isn't rqlite the kind of battle-hardened, lean and mean system Klingons would use? **Qapla'!**
