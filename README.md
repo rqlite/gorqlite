@@ -136,7 +136,7 @@ results, err := conn.Request([]string{
 
 ### Queued writes
 
-[Queued writes](https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md) are fire-and-forget batched writes. They return a sequence number, not per-statement results.
+[Queued writes](https://rqlite.io/docs/api/queued-writes/) are fire-and-forget batched writes. They return a sequence number, not per-statement results.
 
 ```go
 seq, err := conn.QueueOne("INSERT INTO secret_agents(id, name) VALUES (1, 'Q')")
