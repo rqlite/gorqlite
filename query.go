@@ -60,24 +60,9 @@ type NullTime struct {
 {
     "results": [
         {
-            "columns": [
-                "id",
-                "name"
-            ],
-            "types": [
-                "integer",
-                "text"
-            ],
-            "values": [
-                [
-                    1,
-                    "fiona"
-                ],
-                [
-                    2,
-                    "sinead"
-                ]
-            ],
+            "columns": ["id", "name"],
+            "types": ["integer", "text"],
+            "values": [[1, "fiona"], [2, "sinead"]],
             "time": 0.0150043
         }
     ],
@@ -88,69 +73,46 @@ type NullTime struct {
 
 {
     "results": [
-        {
-            "columns": [
-                "id",
-                "name"
-            ],
-            "types": [
-                "number",
-                "text"
-            ],
-            "values": [
-                [
-                    null,
-                    "Hulk"
-                ]
-            ],
-            "time": 4.8958e-05
-        },
-        {
-            "columns": [
-                "id",
-                "name"
-            ],
-            "types": [
-                "number",
-                "text"
-            ],
-            "time": 1.8460000000000003e-05
-        }
-    ],
-    "time": 0.000134776
-}
-
-	or
-
-{
-    "results": [
-        {
-            "error": "near \"nonsense\": syntax error"
-        }
+        {"error": "near \"nonsense\": syntax error"}
     ],
     "time": 2.478862
 }
 
  * *****************************************************************/
 
+// resultJSON is the unmarshal target for one element of the "results"
+// array returned by /db/query, /db/execute and /db/request. It holds
+// every field any of those endpoints may return.
+type resultJSON struct {
+	Columns      []string        `json:"columns,omitempty"`
+	Types        []string        `json:"types,omitempty"`
+	Values       [][]interface{} `json:"values,omitempty"`
+	LastInsertID *int64          `json:"last_insert_id,omitempty"`
+	RowsAffected *int64          `json:"rows_affected,omitempty"`
+	Time         float64         `json:"time,omitempty"`
+	Error        string          `json:"error,omitempty"`
+}
+
+// responseJSON is the top-level shape returned by /db/query,
+// /db/execute and /db/request.
+type responseJSON struct {
+	Results        []resultJSON `json:"results"`
+	Error          string       `json:"error,omitempty"`
+	Time           float64      `json:"time,omitempty"`
+	SequenceNumber *int64       `json:"sequence_number,omitempty"`
+}
+
 // QueryOne wraps Query into a single-statement method.
 //
 // QueryOne uses context.Background() internally; to specify the context, use QueryOneContext.
 func (conn *Connection) QueryOne(sqlStatement string) (qr QueryResult, err error) {
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-
-	qra, err := conn.Query(sqlStatements)
-	return qra[0], err
+	return conn.QueryOneContext(context.Background(), sqlStatement)
 }
 
 // QueryOneContext wraps Query into a single-statement method.
 func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string) (qr QueryResult, err error) {
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-
-	qra, err := conn.QueryContext(ctx, sqlStatements)
-	return qra[0], err
+	qra, err := conn.QueryContext(ctx, []string{sqlStatement})
+	return firstQueryResult(qra), err
 }
 
 // QueryOneParameterized wraps QueryParameterized into a single-statement method.
@@ -158,14 +120,23 @@ func (conn *Connection) QueryOneContext(ctx context.Context, sqlStatement string
 // QueryOneParameterized uses context.Background() internally;
 // to specify the context, use QueryOneParameterizedContext.
 func (conn *Connection) QueryOneParameterized(statement ParameterizedStatement) (qr QueryResult, err error) {
-	qra, err := conn.QueryParameterized([]ParameterizedStatement{statement})
-	return qra[0], err
+	return conn.QueryOneParameterizedContext(context.Background(), statement)
 }
 
 // QueryOneParameterizedContext wraps QueryParameterizedContext into a single-statement method.
 func (conn *Connection) QueryOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (qr QueryResult, err error) {
 	qra, err := conn.QueryParameterizedContext(ctx, []ParameterizedStatement{statement})
-	return qra[0], err
+	return firstQueryResult(qra), err
+}
+
+// firstQueryResult returns qra[0] if it exists, otherwise a zero QueryResult.
+// Avoids panics when QueryOne wrappers receive an empty slice from an
+// unexpected/empty server response.
+func firstQueryResult(qra []QueryResult) QueryResult {
+	if len(qra) == 0 {
+		return QueryResult{}
+	}
+	return qra[0]
 }
 
 // Query is used to perform SELECT operations in the database. It takes an array of SQL statements and
@@ -199,42 +170,24 @@ func (conn *Connection) QueryParameterized(sqlStatements []ParameterizedStatemen
 	return conn.QueryParameterizedContext(context.Background(), sqlStatements)
 }
 
-func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) QueryResult {
+// parseQueryResult turns a single rqlite result element into a QueryResult.
+func (conn *Connection) parseQueryResult(r resultJSON) QueryResult {
 	var qr QueryResult
+	qr.conn = conn
+	qr.rowNumber = -1
+	qr.Timing = r.Time
 
-	// did we get an error?
-	_, ok := thisResult["error"]
-	if ok {
-		trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
-		qr.Err = errors.New(thisResult["error"].(string))
+	if r.Error != "" {
+		trace("%s: have an error on this result: %s", conn.ID, r.Error)
+		qr.Err = errors.New(r.Error)
 		return qr
 	}
 
-	// time is a float64 (could be nil)
-	_, ok = thisResult["time"]
-	if ok {
-		qr.Timing = thisResult["time"].(float64)
-	}
-
-	// column & type are an array of strings
-	c := thisResult["columns"].([]interface{})
-	t := thisResult["types"].([]interface{})
-	for i := 0; i < len(c); i++ {
-		qr.columns = append(qr.columns, c[i].(string))
-		qr.types = append(qr.types, t[i].(string))
-	}
-
-	// and values are an array of arrays
-	if thisResult["values"] != nil {
-		qr.values = thisResult["values"].([]interface{})
-	} else {
-		trace("%s: fyi, no values this query", conn.ID)
-	}
-
-	qr.rowNumber = -1
+	qr.columns = r.Columns
+	qr.types = r.Types
+	qr.values = r.Values
 
 	trace("%s: this result (#col,time) %d %f", conn.ID, len(qr.columns), qr.Timing)
-
 	return qr
 }
 
@@ -245,57 +198,41 @@ func (conn *Connection) parseQueryResult(thisResult map[string]interface{}) Quer
 func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []QueryResult, err error) {
 	results = make([]QueryResult, 0)
 
-	if conn.hasBeenClosed {
-		var errResult QueryResult
-		errResult.Err = ErrClosed
-		results = append(results, errResult)
+	if conn.isClosed() {
+		results = append(results, QueryResult{Err: ErrClosed})
 		return results, ErrClosed
 	}
 
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
-	// if we get an error POSTing, that's a showstopper
 	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
-		var errResult QueryResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, QueryResult{Err: err})
 		return results, err
 	}
 	trace("%s: rqliteApiCall() OK", conn.ID)
 
-	// if we get an error Unmarshaling, that's a showstopper
-	var sections map[string]interface{}
-	err = json.Unmarshal(response, &sections)
-	if err != nil {
+	var resp responseJSON
+	if err := json.Unmarshal(response, &resp); err != nil {
 		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
-		var errResult QueryResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, QueryResult{Err: err})
 		return results, err
 	}
 
-	// if we got an error from the api, that's a showstopper
-	if errMsg, ok := sections["error"].(string); ok && errMsg != "" {
-		trace("%s: api ERROR: %s", conn.ID, errMsg)
-		var errResult QueryResult
-		errResult.Err = fmt.Errorf("%s", errMsg)
-		results = append(results, errResult)
-		return results, errResult.Err
+	if resp.Error != "" {
+		trace("%s: api ERROR: %s", conn.ID, resp.Error)
+		apiErr := errors.New(resp.Error)
+		results = append(results, QueryResult{Err: apiErr})
+		return results, apiErr
 	}
 
-	// at this point, we have a "results" section and
-	// a "time" section.  we can ignore the latter.
-
-	resultsArray := sections["results"].([]interface{})
-	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
+	trace("%s: I have %d result(s) to parse", conn.ID, len(resp.Results))
 
 	var errs []error
-	for n, r := range resultsArray {
+	for n, r := range resp.Results {
 		trace("%s: parsing result %d", conn.ID, n)
-		qr := conn.parseQueryResult(r.(map[string]interface{}))
-		qr.conn = conn
+		qr := conn.parseQueryResult(r)
 		results = append(results, qr)
 		if qr.Err != nil {
 			errs = append(errs, qr.Err)
@@ -328,30 +265,14 @@ type QueryResult struct {
 	columns   []string
 	types     []string
 	Timing    float64
-	values    []interface{}
+	values    [][]interface{}
 	rowNumber int64
 }
-
-// these are done as getters rather than as public
-// variables to prevent monkey business by the user
-// that would put us in an inconsistent state
-
-/* *****************************************************************
-
-   method: QueryResult.Columns()
-
- * *****************************************************************/
 
 // Columns returns a list of the column names for this QueryResult.
 func (qr *QueryResult) Columns() []string {
 	return qr.columns
 }
-
-/* *****************************************************************
-
-   method: QueryResult.Map()
-
- * *****************************************************************/
 
 // Map returns the current row (as advanced by Next()) as a map[string]interface{}.
 //
@@ -367,7 +288,7 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 		return ans, errors.New("you need to Next() before you Map(), sorry, it's complicated")
 	}
 
-	thisRowValues := qr.values[qr.rowNumber].([]interface{})
+	thisRowValues := qr.values[qr.rowNumber]
 	for i := 0; i < len(qr.columns); i++ {
 		switch qr.types[i] {
 		case "date", "datetime":
@@ -400,7 +321,7 @@ func (qr *QueryResult) Slice() ([]interface{}, error) {
 		return nil, errors.New("you need to Next() before you Slice(), sorry, it's complicated")
 	}
 
-	thisRowValues := qr.values[qr.rowNumber].([]interface{})
+	thisRowValues := qr.values[qr.rowNumber]
 	ans := make([]interface{}, len(thisRowValues))
 	for i, v := range thisRowValues {
 		switch qr.types[i] {
@@ -420,12 +341,6 @@ func (qr *QueryResult) Slice() ([]interface{}, error) {
 	}
 	return ans, nil
 }
-
-/* *****************************************************************
-
-	method: QueryResult.Next()
-
- * *****************************************************************/
 
 // Next positions the QueryResult result pointer so that Scan() or Map() is ready.
 //
@@ -447,22 +362,10 @@ func (qr *QueryResult) Next() bool {
 	return true
 }
 
-/* *****************************************************************
-
-   method: QueryResult.NumRows()
-
- * *****************************************************************/
-
 // NumRows returns the number of rows returned by the query.
 func (qr *QueryResult) NumRows() int64 {
 	return int64(len(qr.values))
 }
-
-/* *****************************************************************
-
-   method: QueryResult.RowNumber()
-
- * *****************************************************************/
 
 // RowNumber returns the current row number as Next() iterates through the result's rows.
 func (qr *QueryResult) RowNumber() int64 {
@@ -484,12 +387,6 @@ func toTime(src interface{}) (time.Time, error) {
 	}
 	return time.Time{}, fmt.Errorf("invalid time type:%T val:%v", src, src)
 }
-
-/* *****************************************************************
-
-   method: QueryResult.Scan()
-
- * *****************************************************************/
 
 // Scan takes a list of pointers and then updates them to reflect the current row's data.
 //
@@ -514,7 +411,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 		return fmt.Errorf("expected %d columns but got %d vars", len(qr.columns), len(dest))
 	}
 
-	thisRowValues := qr.values[qr.rowNumber].([]interface{})
+	thisRowValues := qr.values[qr.rowNumber]
 	for n, d := range dest {
 		src := thisRowValues[n]
 		switch d := d.(type) {
@@ -746,15 +643,9 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 	return nil
 }
 
-/* *****************************************************************
-
-   method: QueryResult.Types()
-
- * *****************************************************************/
-
 // Types returns an array of the column's types.
 //
-// Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  So you can initialize a column as CHAR(3) but it's really TEXT.  See https://www.sqlite.org/datatype3.html
+// Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  See https://www.sqlite.org/datatype3.html
 //
 // This info may additionally conflict with the reality that your data is being JSON encoded/decoded.
 func (qr *QueryResult) Types() []string {

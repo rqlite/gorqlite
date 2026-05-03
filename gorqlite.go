@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 )
 
 type apiOperation int
@@ -29,12 +30,13 @@ const (
 	api_QUERY apiOperation = iota
 	api_STATUS
 	api_WRITE
+	api_WRITE_QUEUED
 	api_NODES
 	api_REQUEST
 )
 
 func init() {
-	traceOut = io.Discard
+	traceOut.Store(traceWriter{Writer: io.Discard})
 }
 
 // Open creates and returns a "connection" to rqlite, using
@@ -65,68 +67,58 @@ func Open(connURL string) (*Connection, error) {
 // This allows clients to have complete conntrol over the HTTP
 // communications between this client and the rqlite system.
 func OpenWithClient(connURL string, client *http.Client) (*Connection, error) {
-	var conn = &Connection{}
+	conn := &Connection{}
 
-	// generate our uuid for trace
 	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		return conn, err
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
 	}
 	conn.ID = fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-	trace("%s: Open() called for url: %s", conn.ID, connURL)
+	trace("%s: Open() called for url: %s", conn.ID, redactURL(connURL))
 
-	// set defaults
-	conn.hasBeenClosed = false
-
-	// parse the URL given
-	err = conn.initConnection(connURL, client)
-	if err != nil {
-		return conn, err
+	if err := conn.initConnection(connURL, client); err != nil {
+		return nil, err
 	}
 
 	if !conn.disableClusterDiscovery {
 		// call updateClusterInfo() to re-populate the cluster and discover peers
 		// also tests the user's default
 		if err := conn.updateClusterInfo(); err != nil {
-			return conn, err
+			return nil, err
 		}
 	}
 
 	return conn, nil
 }
 
-// trace adds a message to the trace output
+// traceWriter wraps an io.Writer so we can store it in an atomic.Value
+// (which requires consistent concrete types across stores).
+type traceWriter struct{ io.Writer }
+
+// traceOut is read on every trace() call but only written by TraceOn /
+// TraceOff. atomic.Value lets us swap the writer without locking the
+// hot path, and lets concurrent callers read it without races.
+var traceOut atomic.Value // traceWriter
+
+// wantsTrace is non-zero when tracing is enabled. We use a uint32 with
+// atomic Load/Store rather than atomic.Bool to keep this package
+// usable on Go versions older than 1.19.
+var wantsTrace uint32
+
+// trace adds a message to the trace output.
 //
-// not a public function.  we (inside) can add - outside they can
-// only see.
-//
-// Call trace as:     Sprintf pattern , args...
-//
-// This is done so that the more expensive Sprintf() stuff is
-// done only if truly needed.  When tracing is off, calls to
-// trace() just hit a bool check and return.  If tracing is on,
-// then the Sprintf-ing is done at a leisurely pace because, well,
-// we're tracing.
-//
-// Premature optimization is the root of all evil, so this is
-// probably sinful behavior.
-//
-// Don't put a \n in your Sprintf pattern becuase trace() adds one
+// Don't put a \n in your Sprintf pattern because trace() adds one.
 func trace(pattern string, args ...interface{}) {
-	// don't do the probably expensive Sprintf() if not needed
-	if !wantsTrace {
+	if atomic.LoadUint32(&wantsTrace) == 0 {
 		return
 	}
-
-	// this could all be made into one long statement but we have
-	// compilers to do such things for us. let's sip a mint julep
-	// and spell this out in glorious exposition.
 
 	// make sure there is one and only one newline
 	nlPattern := strings.TrimSpace(pattern) + "\n"
 	msg := fmt.Sprintf(nlPattern, args...)
-	traceOut.Write([]byte(msg))
+	if w, ok := traceOut.Load().(traceWriter); ok && w.Writer != nil {
+		w.Write([]byte(msg))
+	}
 }
 
 // TraceOn turns on tracing output to the io.Writer of your choice.
@@ -136,13 +128,13 @@ func trace(pattern string, args ...interface{}) {
 // Normally, you should run with tracing off, as it makes absolutely
 // no concession to performance and is intended for debugging/dev use.
 func TraceOn(w io.Writer) {
-	traceOut = w
-	wantsTrace = true
+	traceOut.Store(traceWriter{Writer: w})
+	atomic.StoreUint32(&wantsTrace, 1)
 }
 
 // TraceOff turns off tracing output. Once you call TraceOff(), no further
 // info is sent to the io.Writer, unless it is TraceOn'd again.
 func TraceOff() {
-	wantsTrace = false
-	traceOut = io.Discard
+	atomic.StoreUint32(&wantsTrace, 0)
+	traceOut.Store(traceWriter{Writer: io.Discard})
 }

@@ -4,19 +4,13 @@ package gorqlite
 	this file contains some high-level Connection-oriented stuff
 */
 
-/* *****************************************************************
-
-   imports
-
- * *****************************************************************/
-
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	nurl "net/url"
@@ -31,100 +25,131 @@ var DefaultHTTPClient = &http.Client{
 	Timeout: defaultTimeout * time.Second,
 }
 
-var (
-	// ErrClosed indicates that client connection was closed
-	ErrClosed = errors.New("gorqlite: connection is closed")
-	traceOut  io.Writer
-)
-
-// defaults to false.  This is used in trace() to quickly
-// return if tracing is off, so that we don't do a perhaps
-// expensive Sprintf() call only to send it to Discard
-var wantsTrace bool
-
-/* *****************************************************************
-
-   type: Connection
-
- * *****************************************************************/
+// ErrClosed indicates that the connection was closed.
+var ErrClosed = errors.New("gorqlite: connection is closed")
 
 // Connection provides the connection abstraction.
-// Note that since rqlite is stateless, there really is no "connection".
-// However, this type holds  information such as the current leader, peers,
-// connection string to build URLs, etc.
 //
-// Connections are assigned a "connection ID" which is a pseudo-UUID
-// for connection identification in trace output only.  This helps
-// sort out what's going on if you have multiple connections going
-// at once.  It's generated using a non-standards-or-anything-else-compliant
-// function that uses crypto/rand to generate 16 random bytes.
+// Since rqlite is stateless, there is no real connection — this type
+// holds the configuration plus the discovered cluster topology
+// (current leader, peers, scheme, credentials, etc.).
 //
-// Note that the Connection objection holds info on all peers, gathered
-// at time of Open() from the node specified.
+// Connections are assigned a "connection ID" — a pseudo-UUID built
+// from 16 crypto/rand bytes — used only for tagging trace output, so
+// concurrent connections can be distinguished.
+//
+// Connection methods are safe to call concurrently from multiple
+// goroutines. State changes go through a single mutex; the HTTP
+// client is reused as-is so the standard library handles its own
+// concurrency.
 type Connection struct {
+	// mu guards everything mutated after Open: cluster, consistency
+	// level, transaction flag, and the closed flag.
+	mu      sync.RWMutex
 	cluster rqliteCluster
 
-	// name           type                default
+	username                string
+	password                string
+	consistencyLevel        consistencyLevel
+	disableClusterDiscovery bool
+	wantsHTTPS              bool
+	wantsTransactions       bool
 
-	username                string           //   username or ""
-	password                string           //   username or ""
-	consistencyLevel        consistencyLevel //   WEAK
-	disableClusterDiscovery bool             //   false unless user states otherwise
-	wantsHTTPS              bool             //   false unless connection URL is https
-	wantsTransactions       bool             //   true unless user states otherwise
-	wantsQueueing           bool             //   perform queued writes
-
-	// variables below this line need to be initialized in Open()
-
-	hasBeenClosed bool   //   false
-	ID            string //   generated in init()
+	hasBeenClosed bool
+	ID            string
 
 	client *http.Client
 }
 
-// Close will mark the connection as closed. It is safe to be called
-// multiple times.
+// Close marks the connection as closed. Safe to call multiple times.
 func (conn *Connection) Close() {
+	conn.mu.Lock()
 	conn.hasBeenClosed = true
+	conn.mu.Unlock()
 	trace("%s: %s", conn.ID, "closing connection")
 }
 
-// ConsistencyLevel tells the current consistency level
-func (conn *Connection) ConsistencyLevel() (string, error) {
-	if conn.hasBeenClosed {
-		return "", ErrClosed
-	}
-	return consistencyLevelToString[conn.consistencyLevel], nil
+// isClosed reports whether Close has been called. Read-locked because
+// it's hit on every API call.
+func (conn *Connection) isClosed() bool {
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	return conn.hasBeenClosed
 }
 
-// Leader tells the current leader of the cluster
+func (conn *Connection) getConsistencyLevel() consistencyLevel {
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	return conn.consistencyLevel
+}
+
+func (conn *Connection) getWantsTransactions() bool {
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	return conn.wantsTransactions
+}
+
+// setCluster atomically replaces the discovered cluster topology.
+func (conn *Connection) setCluster(rc rqliteCluster) {
+	conn.mu.Lock()
+	conn.cluster = rc
+	conn.mu.Unlock()
+}
+
+// snapshotPeerList returns a copy of the cached peer list under lock,
+// so iteration in rqliteApiCall is race-free even if a concurrent
+// updateClusterInfo replaces the cluster mid-iteration.
+func (conn *Connection) snapshotPeerList() []peer {
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	if len(conn.cluster.peerList) == 0 {
+		return nil
+	}
+	out := make([]peer, len(conn.cluster.peerList))
+	copy(out, conn.cluster.peerList)
+	return out
+}
+
+// ConsistencyLevel returns the current consistency level as a string.
+func (conn *Connection) ConsistencyLevel() (string, error) {
+	if conn.isClosed() {
+		return "", ErrClosed
+	}
+	return consistencyLevelToString[conn.getConsistencyLevel()], nil
+}
+
+// Leader returns the current cluster leader's API address.
 func (conn *Connection) Leader() (string, error) {
-	if conn.hasBeenClosed {
+	if conn.isClosed() {
 		return "", ErrClosed
 	}
 	if conn.disableClusterDiscovery {
-		return string(conn.cluster.leader), nil
+		conn.mu.RLock()
+		leader := string(conn.cluster.leader)
+		conn.mu.RUnlock()
+		return leader, nil
 	}
 	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
-	err := conn.updateClusterInfo()
-	if err != nil {
+	if err := conn.updateClusterInfo(); err != nil {
 		trace("%s: Leader() got error from updateClusterInfo(): %s", conn.ID, err.Error())
 		return "", err
-	} else {
-		trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	}
-	return string(conn.cluster.leader), nil
+	trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
+	conn.mu.RLock()
+	leader := string(conn.cluster.leader)
+	conn.mu.RUnlock()
+	return leader, nil
 }
 
-// Peers tells the current peers of the cluster
+// Peers returns the current cluster peers, leader first.
 func (conn *Connection) Peers() ([]string, error) {
-	if conn.hasBeenClosed {
-		var ans []string
-		return ans, ErrClosed
+	if conn.isClosed() {
+		return nil, ErrClosed
 	}
-	plist := make([]string, 0)
-
 	if conn.disableClusterDiscovery {
+		conn.mu.RLock()
+		defer conn.mu.RUnlock()
+		plist := make([]string, 0, len(conn.cluster.peerList))
 		for _, p := range conn.cluster.peerList {
 			plist = append(plist, string(p))
 		}
@@ -132,13 +157,15 @@ func (conn *Connection) Peers() ([]string, error) {
 	}
 
 	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
-	err := conn.updateClusterInfo()
-	if err != nil {
+	if err := conn.updateClusterInfo(); err != nil {
 		trace("%s: Peers() got error from updateClusterInfo(): %s", conn.ID, err.Error())
-		return plist, err
-	} else {
-		trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
+		return nil, err
 	}
+	trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
+
+	conn.mu.RLock()
+	defer conn.mu.RUnlock()
+	plist := make([]string, 0, 1+len(conn.cluster.otherPeers))
 	if conn.cluster.leader != "" {
 		plist = append(plist, string(conn.cluster.leader))
 	}
@@ -148,8 +175,10 @@ func (conn *Connection) Peers() ([]string, error) {
 	return plist, nil
 }
 
+// SetConsistencyLevel sets the consistency level used for future
+// queries on this connection.
 func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error {
-	if conn.hasBeenClosed {
+	if conn.isClosed() {
 		return ErrClosed
 	}
 
@@ -157,15 +186,21 @@ func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error
 		return fmt.Errorf("unknown consistency level: %d", levelDesired)
 	}
 
+	conn.mu.Lock()
 	conn.consistencyLevel = levelDesired
+	conn.mu.Unlock()
 	return nil
 }
 
+// SetExecutionWithTransaction toggles whether multi-statement
+// queries/writes are wrapped in a single rqlite transaction.
 func (conn *Connection) SetExecutionWithTransaction(state bool) error {
-	if conn.hasBeenClosed {
+	if conn.isClosed() {
 		return ErrClosed
 	}
+	conn.mu.Lock()
 	conn.wantsTransactions = state
+	conn.mu.Unlock()
 	return nil
 }
 
@@ -205,8 +240,6 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //	port                        "4001"
 //	consistencyLevel            "weak"
 func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
-	// do some sanity checks.  You know users.
-
 	if len(url) < 7 {
 		return errors.New("url specified is impossibly short")
 	}
@@ -225,20 +258,10 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 		conn.wantsHTTPS = true
 	}
 
-	// specs say Username() is always populated even if empty
-	if u.User == nil {
-		conn.username = ""
-		conn.password = ""
-	} else {
-		// guaranteed, but could be empty which is ok
+	if u.User != nil {
 		conn.username = u.User.Username()
-
-		// not guaranteed, so test if set
-		pass, isset := u.User.Password()
-		if isset {
+		if pass, isset := u.User.Password(); isset {
 			conn.password = pass
-		} else {
-			conn.password = ""
 		}
 	}
 
@@ -249,25 +272,20 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	}
 	conn.cluster.peerList = []peer{conn.cluster.leader}
 
-	// at the moment, the only allowed query is "level=" with
-	// the desired consistency level
-
-	// default
 	conn.consistencyLevel = ConsistencyLevelWeak
 
-	// parse query params
 	query := u.Query()
-	if query.Get("level") != "" {
-		cl, err := ParseConsistencyLevel(query.Get("level"))
+	if level := query.Get("level"); level != "" {
+		cl, err := ParseConsistencyLevel(level)
 		if err != nil {
-			return fmt.Errorf("invalid consistency level: %s %w", query.Get("level"), err)
+			return fmt.Errorf("invalid consistency level: %s %w", level, err)
 		}
 		conn.consistencyLevel = cl
 	}
 
 	conn.disableClusterDiscovery = defaultDisableClusterDiscovery
-	if query.Get("disableClusterDiscovery") != "" {
-		dpd, err := strconv.ParseBool(query.Get("disableClusterDiscovery"))
+	if v := query.Get("disableClusterDiscovery"); v != "" {
+		dpd, err := strconv.ParseBool(v)
 		if err != nil {
 			return errors.New("invalid disableClusterDiscovery value: " + err.Error())
 		}
@@ -275,18 +293,16 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	}
 
 	timeout := defaultTimeout
-	if query.Get("timeout") != "" {
-		customTimeout, err := strconv.Atoi(query.Get("timeout"))
+	if v := query.Get("timeout"); v != "" {
+		customTimeout, err := strconv.Atoi(v)
 		if err != nil {
 			return errors.New("invalid timeout specified: " + err.Error())
 		}
 		timeout = customTimeout
 	}
 
-	// Default transaction state
 	conn.wantsTransactions = true
 
-	// Initialize http client for connection
 	conn.client = httpClient
 	if conn.client == nil {
 		conn.client = &http.Client{
@@ -295,18 +311,23 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	}
 
 	trace("%s: parseDefaultPeer() is done:", conn.ID)
-	if conn.wantsHTTPS {
-		trace("%s:    %s -> %s", conn.ID, "wants https?", "yes")
-	} else {
-		trace("%s:    %s -> %s", conn.ID, "wants https?", "no")
-	}
-	trace("%s:    %s -> %s", conn.ID, "username", conn.username)
-	trace("%s:    %s -> %s", conn.ID, "password", conn.password)
-	trace("%s:    %s -> %s", conn.ID, "host", conn.cluster.leader)
-	trace("%s:    %s -> %s", conn.ID, "consistencyLevel", consistencyLevelToString[conn.consistencyLevel])
-	trace("%s:    %s -> %s", conn.ID, "wantsTransaction", conn.wantsTransactions)
+	trace("%s:    wants https? -> %t", conn.ID, conn.wantsHTTPS)
+	trace("%s:    username -> %s", conn.ID, conn.username)
+	trace("%s:    password -> %s", conn.ID, redactedPassword(conn.password))
+	trace("%s:    host -> %s", conn.ID, conn.cluster.leader)
+	trace("%s:    consistencyLevel -> %s", conn.ID, consistencyLevelToString[conn.consistencyLevel])
+	trace("%s:    wantsTransaction -> %t", conn.ID, conn.wantsTransactions)
 
 	conn.cluster.conn = conn
 
 	return nil
+}
+
+// redactedPassword returns a fixed mask if password is set, or empty
+// otherwise. Used so trace output never reveals the real value.
+func redactedPassword(p string) string {
+	if p == "" {
+		return ""
+	}
+	return "[redacted]"
 }

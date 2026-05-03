@@ -1,14 +1,7 @@
 package gorqlite
 
-// this file has low level stuff:
-//
-// rqliteApiGet()
-// rqliteApiPost()
-//
-// There is some code duplication between those and they should
-// probably be combined into one function.
-//
-// nothing public here.
+// Low-level transport: rqliteApiCall, rqliteApiGet, rqliteApiPost.
+// Nothing here is exported.
 
 import (
 	"bytes"
@@ -27,74 +20,30 @@ type ParameterizedStatement struct {
 	Arguments []interface{}
 }
 
-// method: rqliteApiCall() - internally handles api calls,
-// not supposed to be used by other files
-//
-//   - handles retries
-//   - handles timeouts
+// rqliteApiCall executes one HTTP request, retrying against each
+// known peer in turn. Returns the body of the first 2xx response, or
+// a combined error listing every peer's failure.
 func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
-	// Verify that we have at least a single peer to which we can make the request
-	peers := conn.cluster.PeerList()
+	peers := conn.snapshotPeerList()
 	if len(peers) < 1 {
 		return nil, errors.New("don't have any cluster info")
 	}
 	trace("%s: I have a peer list %d peers long", conn.ID, len(peers))
 
-	// Keep list of failed requests to each peer, return in case all peers fail to answer
 	var failureLog []string
 
-	for i, peer := range peers {
-		trace("%s: attemping to contact peer %d", conn.ID, i)
-		url := conn.assembleURL(apiOp, peer)
+	for i, p := range peers {
+		trace("%s: attempting to contact peer %d", conn.ID, i)
+		url := conn.assembleURL(apiOp, p)
 
-		// Prepare request
-		var bodyReader io.Reader
-		if requestBody != nil {
-			bodyReader = bytes.NewBuffer(requestBody)
-		}
-		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+		body, err := conn.doOnce(ctx, method, url, requestBody)
 		if err != nil {
-			trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
 			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
 			continue
 		}
-		trace("%s: http.NewRequest() OK", conn.ID)
-		req.Header.Set("Content-Type", "application/json")
-
-		// Execute request using shared client
-		// We will close the response body as soon as we can to allow
-		// the TCP connection to escape back into client's pool
-		response, err := conn.client.Do(req)
-		if err != nil {
-			trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
-			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
-			continue
-		}
-
-		// Read response body even if not a successful answer to return a descriptive error message
-		responseBody, err := io.ReadAll(response.Body)
-		if err != nil {
-			trace("%s: got error '%s' doing ioutil.ReadAll", conn.ID, err.Error())
-			failureLog = append(failureLog, fmt.Sprintf("%s failed due to %s", redactURL(url), err.Error()))
-			response.Body.Close()
-			continue
-		}
-		trace("%s: ioutil.ReadAll() OK", conn.ID)
-
-		// Check that we've got a successful answer
-		if response.StatusCode != http.StatusOK {
-			trace("%s: got code %s", conn.ID, response.Status)
-			failureLog = append(failureLog, fmt.Sprintf("%s failed, got: %s, message: %s", redactURL(url), response.Status, string(responseBody)))
-			response.Body.Close()
-			continue
-		}
-		response.Body.Close()
-		trace("%s: client.Do() OK", conn.ID)
-
-		return responseBody, nil
+		return body, nil
 	}
 
-	// All peers have failed to answer us, build a verbose error message
 	var builder strings.Builder
 	builder.WriteString("tried all peers unsuccessfully. here are the results:\n")
 	for n, v := range failureLog {
@@ -103,8 +52,46 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	return nil, errors.New(builder.String())
 }
 
-// redactURL redacts URL from the given parameter to be
-// safely read by the client
+// doOnce performs a single HTTP attempt. Body is closed before
+// returning regardless of outcome.
+func (conn *Connection) doOnce(ctx context.Context, method, url string, requestBody []byte) ([]byte, error) {
+	var bodyReader io.Reader
+	if requestBody != nil {
+		bodyReader = bytes.NewBuffer(requestBody)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		trace("%s: got error '%s' doing http.NewRequest", conn.ID, err.Error())
+		return nil, err
+	}
+	trace("%s: http.NewRequest() OK", conn.ID)
+	req.Header.Set("Content-Type", "application/json")
+
+	response, err := conn.client.Do(req)
+	if err != nil {
+		trace("%s: got error '%s' doing client.Do", conn.ID, err.Error())
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		trace("%s: got error '%s' reading response body", conn.ID, err.Error())
+		return nil, err
+	}
+	trace("%s: response body read OK", conn.ID)
+
+	if response.StatusCode != http.StatusOK {
+		trace("%s: got code %s", conn.ID, response.Status)
+		return nil, fmt.Errorf("got: %s, message: %s", response.Status, string(responseBody))
+	}
+	trace("%s: client.Do() OK", conn.ID)
+	return responseBody, nil
+}
+
+// redactURL replaces the userinfo (username:password) of url with the
+// mask used by net/url's Redacted helper. Returns "" if the url is
+// malformed.
 func redactURL(url string) string {
 	u, err := nurl.Parse(url)
 	if err != nil {
@@ -113,40 +100,29 @@ func redactURL(url string) string {
 	return u.Redacted()
 }
 
-//	   method: rqliteApiGet() - for api_STATUS and api_NODES
-//
-//		- lowest level interface - does not do any JSON unmarshaling
-//		- handles retries
-//		- handles timeouts
+// rqliteApiGet is the GET variant of rqliteApiCall, restricted to
+// read-only endpoints.
 func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([]byte, error) {
-	var responseBody []byte
 	trace("%s: rqliteApiGet() called", conn.ID)
 
-	// Allow only api_STATUS and api_NODES now - maybe someday BACKUP
 	if apiOp != api_STATUS && apiOp != api_NODES {
-		return responseBody, errors.New("rqliteApiGet() called for invalid api operation")
+		return nil, errors.New("rqliteApiGet() called for invalid api operation")
 	}
 
 	return conn.rqliteApiCall(ctx, apiOp, "GET", nil)
 }
 
-//	   method: rqliteApiPost() - for api_QUERY and api_WRITE
-//
-//		- lowest level interface - does not do any JSON unmarshaling
-//		- handles retries
-//		- handles timeouts
+// rqliteApiPost is the POST variant, used for query/write/request.
+// It serializes the parameterized statements into rqlite's
+// nested-array body format.
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
-	var responseBody []byte
-
-	// Allow only api_QUERY, api_WRITE and api_REQUEST
-	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_REQUEST {
-		return responseBody, errors.New("rqliteApiPost() called for invalid api operation")
+	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_WRITE_QUEUED && apiOp != api_REQUEST {
+		return nil, errors.New("rqliteApiPost() called for invalid api operation")
 	}
 
-	trace("%s: rqliteApiPost() called for a QUERY of %d statements", conn.ID, len(sqlStatements))
+	trace("%s: rqliteApiPost() called for %s of %d statements", conn.ID, apiOpName(apiOp), len(sqlStatements))
 
 	formattedStatements := make([][]interface{}, 0, len(sqlStatements))
-
 	for _, statement := range sqlStatements {
 		formattedStatement := make([]interface{}, 0, len(statement.Arguments)+1)
 		formattedStatement = append(formattedStatement, statement.Query)
