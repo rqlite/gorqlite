@@ -18,11 +18,6 @@ import (
             "last_insert_id": 1,
             "rows_affected": 1,
             "time": 0.00759015
-        },
-        {
-            "last_insert_id": 2,
-            "rows_affected": 1,
-            "time": 0.00669015
         }
     ],
     "time": 0.869015
@@ -32,35 +27,34 @@ import (
 
 {
     "results": [
-        {
-            "error": "table foo already exists"
-        }
+        {"error": "table foo already exists"}
     ],
     "time": 0.18472685400000002
 }
 
-	We don't care about the overall time.  We just want the results,
-	so we'll take those and put each into a WriteResult
-
-	Because the results themselves are smaller than the JSON
-	(which repeats strings like "last_insert_id" frequently),
-	we'll just parse everything at once.
-
  * *****************************************************************/
 
-// WriteOne wraps Write() into a single-statement
-// method.
+// firstWriteResult returns wra[0] or a zero WriteResult if empty,
+// avoiding panics on an unexpected/empty server response.
+func firstWriteResult(wra []WriteResult) WriteResult {
+	if len(wra) == 0 {
+		return WriteResult{}
+	}
+	return wra[0]
+}
+
+// WriteOne wraps Write() into a single-statement method.
 //
 // WriteOne uses context.Background() internally; to specify the context, use WriteOneContext.
 func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
 	wra, err := conn.Write([]string{sqlStatement})
-	return wra[0], err
+	return firstWriteResult(wra), err
 }
 
 // WriteOneContext wraps WriteContext() into a single-statement
 func (conn *Connection) WriteOneContext(ctx context.Context, sqlStatement string) (wr WriteResult, err error) {
 	wra, err := conn.WriteContext(ctx, []string{sqlStatement})
-	return wra[0], err
+	return firstWriteResult(wra), err
 }
 
 // WriteOneParameterized wraps WriteParameterized() into a single-statement method.
@@ -68,14 +62,14 @@ func (conn *Connection) WriteOneContext(ctx context.Context, sqlStatement string
 // WriteOneParameterized uses context.Background() internally; to specify the context, use WriteOneParameterizedContext.
 func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) (wr WriteResult, err error) {
 	wra, err := conn.WriteParameterized([]ParameterizedStatement{statement})
-	return wra[0], err
+	return firstWriteResult(wra), err
 }
 
 // WriteOneParameterizedContext wraps WriteParameterizedContext into
 // a single-statement method.
 func (conn *Connection) WriteOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (wr WriteResult, err error) {
 	wra, err := conn.WriteParameterizedContext(ctx, []ParameterizedStatement{statement})
-	return wra[0], err
+	return firstWriteResult(wra), err
 }
 
 // Write is used to perform DDL/DML in the database synchronously without parameters.
@@ -83,14 +77,7 @@ func (conn *Connection) WriteOneParameterizedContext(ctx context.Context, statem
 // Write uses context.Background() internally; to specify the context, use WriteContext.
 // To use Write with parameterized queries, use WriteParameterized.
 func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.WriteParameterized(parameterizedStatements)
+	return conn.WriteContext(context.Background(), sqlStatements)
 }
 
 // WriteContext is used to perform DDL/DML in the database synchronously without parameters.
@@ -123,28 +110,22 @@ func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatemen
 	return conn.WriteParameterizedContext(context.Background(), sqlStatements)
 }
 
-func (conn *Connection) parseWriteResult(thisResult map[string]interface{}) WriteResult {
+// parseWriteResult turns a single rqlite result element into a WriteResult.
+func (conn *Connection) parseWriteResult(r resultJSON) WriteResult {
 	var wr WriteResult
+	wr.conn = conn
+	wr.Timing = r.Time
 
-	// did we get an error?
-	_, ok := thisResult["error"]
-	if ok {
-		trace("%s: have an error on this result: %s", conn.ID, thisResult["error"].(string))
-		wr.Err = errors.New(thisResult["error"].(string))
+	if r.Error != "" {
+		trace("%s: have an error on this result: %s", conn.ID, r.Error)
+		wr.Err = errors.New(r.Error)
 		return wr
-
 	}
-	_, ok = thisResult["last_insert_id"]
-	if ok {
-		wr.LastInsertID = int64(thisResult["last_insert_id"].(float64))
+	if r.LastInsertID != nil {
+		wr.LastInsertID = *r.LastInsertID
 	}
-	_, ok = thisResult["rows_affected"] // could be zero for a CREATE
-	if ok {
-		wr.RowsAffected = int64(thisResult["rows_affected"].(float64))
-	}
-	_, ok = thisResult["time"] // could be nil
-	if ok {
-		wr.Timing = thisResult["time"].(float64)
+	if r.RowsAffected != nil {
+		wr.RowsAffected = *r.RowsAffected
 	}
 	trace("%s: this result (LII,RA,T): %d %d %f", conn.ID, wr.LastInsertID, wr.RowsAffected, wr.Timing)
 	return wr
@@ -163,10 +144,8 @@ func (conn *Connection) parseWriteResult(thisResult map[string]interface{}) Writ
 func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
-	if conn.hasBeenClosed {
-		var errResult WriteResult
-		errResult.Err = ErrClosed
-		results = append(results, errResult)
+	if conn.isClosed() {
+		results = append(results, WriteResult{Err: ErrClosed})
 		return results, ErrClosed
 	}
 
@@ -175,41 +154,30 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
 	trace("%s: rqliteApiCall() OK", conn.ID)
 
-	var sections map[string]interface{}
-	err = json.Unmarshal(response, &sections)
-	if err != nil {
+	var resp responseJSON
+	if err := json.Unmarshal(response, &resp); err != nil {
 		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
 
-	// at this point, we have a "results" section and
-	// a "time" section.  we can igore the latter.
-
-	resultsArray, ok := sections["results"].([]interface{})
-	if !ok {
+	if resp.Results == nil {
 		err = errors.New("result key is missing from response")
-		trace("%s: sections[\"results\"] ERROR: %s", conn.ID, err)
-		var errResult WriteResult
-		errResult.Err = err
-		results = append(results, errResult)
+		trace("%s: missing results key: %s", conn.ID, err)
+		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
-	trace("%s: I have %d result(s) to parse", conn.ID, len(resultsArray))
+	trace("%s: I have %d result(s) to parse", conn.ID, len(resp.Results))
+
 	var errs []error
-	for n, k := range resultsArray {
+	for n, r := range resp.Results {
 		trace("%s: starting on result %d", conn.ID, n)
-		wr := conn.parseWriteResult(k.(map[string]interface{}))
-		wr.conn = conn
+		wr := conn.parseWriteResult(r)
 		results = append(results, wr)
 		if wr.Err != nil {
 			errs = append(errs, wr.Err)
@@ -225,9 +193,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 //
 // QueueOne uses context.Background() internally; to specify the context, use QueueOneContext.
 func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
-	sqlStatements := make([]string, 0)
-	sqlStatements = append(sqlStatements, sqlStatement)
-	return conn.Queue(sqlStatements)
+	return conn.QueueContext(context.Background(), []string{sqlStatement})
 }
 
 // QueueOneContext is a convenience method that wraps QueueContext into a single-statement
@@ -282,33 +248,29 @@ func (conn *Connection) QueueParameterized(sqlStatements []ParameterizedStatemen
 // to the rqlite database as defined in the documentation:
 // https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md
 func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (seq int64, err error) {
-	if conn.hasBeenClosed {
+	if conn.isClosed() {
 		return 0, ErrClosed
 	}
 
-	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
+	trace("%s: Queue() for %d statements", conn.ID, len(sqlStatements))
 
-	// Set queuing mode just for this call.
-	conn.wantsQueueing = true
-	defer func() {
-		conn.wantsQueueing = false
-	}()
-
-	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, api_WRITE_QUEUED, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		return 0, err
 	}
 	trace("%s: rqliteApiCall() OK", conn.ID)
 
-	var sections map[string]interface{}
-	err = json.Unmarshal(response, &sections)
-	if err != nil {
+	var resp responseJSON
+	if err := json.Unmarshal(response, &resp); err != nil {
 		trace("%s: json.Unmarshal() ERROR: %s", conn.ID, err.Error())
 		return 0, err
 	}
 
-	return int64(sections["sequence_number"].(float64)), nil
+	if resp.SequenceNumber == nil {
+		return 0, errors.New("sequence_number missing from response")
+	}
+	return *resp.SequenceNumber, nil
 }
 
 // WriteResult holds the result of a single statement sent to Write().
