@@ -263,7 +263,3 @@ GORQLITE_TEST_TABLE_STDLIB=some_other_table
 - expvars / debugvars.
 - Node removal API.
 - "none" consistency reads sent to followers (currently always routed to the leader, except during leader discovery).
-
-## Pronunciation
-
-rqlite is "ree-qwell-lite" (or "R-Q-lite", depending on who you ask). gorqlite is "go-ree-kwell-lite" or "gork-lite". The Klingon in me prefers the latter — isn't rqlite the kind of battle-hardened, lean and mean system Klingons would use? **Qapla'!**
