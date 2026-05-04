@@ -1,9 +1,5 @@
 package gorqlite
 
-/*
-	this file contains some high-level Connection-oriented stuff
-*/
-
 import (
 	"errors"
 	"fmt"
@@ -44,7 +40,9 @@ var ErrClosed = errors.New("gorqlite: connection is closed")
 // concurrency.
 type Connection struct {
 	// mu guards everything mutated after Open: cluster, consistency
-	// level, transaction flag, and the closed flag.
+	// level, transaction flag, and the closed flag. Fields below
+	// (username/password/scheme/client/etc.) are written once during
+	// Open and treated as immutable thereafter.
 	mu      sync.RWMutex
 	cluster rqliteCluster
 
@@ -118,7 +116,9 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 	return consistencyLevelToString[conn.getConsistencyLevel()], nil
 }
 
-// Leader returns the current cluster leader's API address.
+// Leader returns the current cluster leader's API address. With cluster
+// discovery enabled, calling Leader refreshes the cached topology
+// before returning.
 func (conn *Connection) Leader() (string, error) {
 	if conn.isClosed() {
 		return "", ErrClosed
@@ -141,7 +141,9 @@ func (conn *Connection) Leader() (string, error) {
 	return leader, nil
 }
 
-// Peers returns the current cluster peers, leader first.
+// Peers returns the current cluster peers, leader first. With cluster
+// discovery enabled, calling Peers refreshes the cached topology
+// before returning.
 func (conn *Connection) Peers() ([]string, error) {
 	if conn.isClosed() {
 		return nil, ErrClosed
@@ -204,41 +206,23 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 	return nil
 }
 
-// initConnection takes the initial connection URL specified by
-// the user, and a HTTP client. The URL is parsed to determine
-// the peer's addresss. This peer is assumed to be the leader.
-// The next thing Open() does is updateClusterInfo()
-// so the truth will be revealed soon enough.
-//
-// initConnection() does not talk to rqlite.  It only parses the
-// connection URL and prepares the new connection for work. If
-// the HTTP client is nil, then the default client is used.
+// initConnection parses the user-supplied URL, extracts credentials
+// and options, and sets up the connection's initial state. It does
+// not contact rqlite; Open does that as a follow-up via
+// updateClusterInfo. If httpClient is nil, a fresh *http.Client with
+// the configured timeout is used.
 //
 // URL format:
 //
-//	http[s]://${USER}:${PASSWORD}@${HOSTNAME}:${PORT}/db?[OPTIONS]
+//	http[s]://[user[:password]@]host[:port]/[?option=value&...]
 //
-// Examples:
+// Recognised options:
 //
-//	https://mary:secret2@localhost:4001/db
-//	https://mary:secret2@server1.example.com:4001/db?level=none
-//	https://mary:secret2@server2.example.com:4001/db?level=weak
-//	https://mary:secret2@localhost:2265/db?level=strong
+//	level=none|weak|linearizable|strong  consistency level (default: weak)
+//	disableClusterDiscovery=true|false   skip /status discovery on Open and on Leader/Peers
+//	timeout=<seconds>                    sets the default http.Client timeout (default: 10)
 //
-// to use default connection to localhost:4001 with no auth:
-//
-//	http://
-//	https://
-//
-// guaranteed map fields - will be set to "" if not specified
-//
-//	field name                  default if not specified
-//
-//	username                    ""
-//	password                    ""
-//	hostname                    "localhost"
-//	port                        "4001"
-//	consistencyLevel            "weak"
+// If the URL has no host the leader defaults to localhost:4001.
 func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
 	if len(url) < 7 {
 		return errors.New("url specified is impossibly short")
@@ -278,7 +262,7 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	if level := query.Get("level"); level != "" {
 		cl, err := ParseConsistencyLevel(level)
 		if err != nil {
-			return fmt.Errorf("invalid consistency level: %s %w", level, err)
+			return fmt.Errorf("invalid consistency level %q: %w", level, err)
 		}
 		conn.consistencyLevel = cl
 	}
@@ -287,7 +271,7 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	if v := query.Get("disableClusterDiscovery"); v != "" {
 		dpd, err := strconv.ParseBool(v)
 		if err != nil {
-			return errors.New("invalid disableClusterDiscovery value: " + err.Error())
+			return fmt.Errorf("invalid disableClusterDiscovery value %q: %w", v, err)
 		}
 		conn.disableClusterDiscovery = dpd
 	}
@@ -296,7 +280,7 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 	if v := query.Get("timeout"); v != "" {
 		customTimeout, err := strconv.Atoi(v)
 		if err != nil {
-			return errors.New("invalid timeout specified: " + err.Error())
+			return fmt.Errorf("invalid timeout value %q: %w", v, err)
 		}
 		timeout = customTimeout
 	}
@@ -310,15 +294,13 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 		}
 	}
 
-	trace("%s: parseDefaultPeer() is done:", conn.ID)
+	trace("%s: initConnection done:", conn.ID)
 	trace("%s:    wants https? -> %t", conn.ID, conn.wantsHTTPS)
 	trace("%s:    username -> %s", conn.ID, conn.username)
 	trace("%s:    password -> %s", conn.ID, redactedPassword(conn.password))
 	trace("%s:    host -> %s", conn.ID, conn.cluster.leader)
 	trace("%s:    consistencyLevel -> %s", conn.ID, consistencyLevelToString[conn.consistencyLevel])
 	trace("%s:    wantsTransaction -> %t", conn.ID, conn.wantsTransactions)
-
-	conn.cluster.conn = conn
 
 	return nil
 }
