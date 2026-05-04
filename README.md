@@ -5,7 +5,7 @@ gorqlite is a Go client for [rqlite](https://github.com/rqlite/rqlite). It hides
 
 The main API mirrors a subset of `database/sql` semantics — `Open()`, `Query()`/`QueryOne()`, `Next()`/`Scan()`/`Map()`, `Write()`/`WriteOne()` — without pretending to be a full `database/sql` driver.
 
-> Looking for an even smaller wrapper? See [rqlite/rqlite-go-http](https://github.com/rqlite/rqlite-go-http).
+> Looking for a lightweight Go client? See [rqlite/rqlite-go-http](https://github.com/rqlite/rqlite-go-http).
 
 ## Status
 
