@@ -1,18 +1,18 @@
 package gorqlite_test
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/rqlite/gorqlite"
 )
-
-// statusJSON is enough /status payload to satisfy updateClusterInfo
-// when bringing up a fake server in these tests.
-const statusJSON = `{"store":{"leader":"127.0.0.1:9001","metadata":{"127.0.0.1:9001":{"api_addr":"%s"}}}}`
 
 // fakeServer is an httptest.Server pretending to be rqlite. The
 // handler for /db/* is provided per-test.
@@ -27,10 +27,9 @@ func newFakeServer(t *testing.T, dbHandler http.HandlerFunc) *fakeServer {
 	t.Cleanup(srv.Close)
 
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-		// Strip the http:// from URL so we have just host:port.
 		host := strings.TrimPrefix(srv.URL, "http://")
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("{\"store\":{\"leader\":\"" + host + "\",\"metadata\":{\"" + host + "\":{\"api_addr\":\"http://" + host + "\"}}}}"))
+		w.Write([]byte(`{"store":{"leader":"` + host + `","metadata":{"` + host + `":{"api_addr":"http://` + host + `"}}}}`))
 	})
 	mux.HandleFunc("/nodes", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{}`))
@@ -62,7 +61,7 @@ func TestQueryDoesNotPanicOnUnexpectedJSON(t *testing.T) {
 			}
 			defer conn.Close()
 
-			// QueryOne must never panic regardless of payload.
+			// Must never panic regardless of payload.
 			_, _ = conn.QueryOne("SELECT 1")
 			_, _ = conn.WriteOne("INSERT INTO x VALUES (1)")
 			_, _ = conn.Request([]string{"SELECT 1"})
@@ -95,12 +94,7 @@ func TestConcurrentQueueDoesNotRace(t *testing.T) {
 	// gone; this test pins that property by hammering the path under
 	// -race.
 
-	var seen sync.Map
 	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request) {
-		seen.Store(r.URL.RawQuery, true)
-		// Always respond as if it were a queued write so the call
-		// succeeds for QueueOne and WriteOne both wouldn't matter
-		// here — we only care about no race + no panic.
 		w.Write([]byte(`{"results":[{"last_insert_id":1,"rows_affected":1}],"sequence_number":42}`))
 	})
 
@@ -125,4 +119,83 @@ func TestConcurrentQueueDoesNotRace(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestRetryHonorsContext confirms that the inflight HTTP client
+// respects ctx cancellation via http.NewRequestWithContext. We use a
+// slow-but-cancellable handler and a tight ctx timeout, then verify
+// the call returns quickly with the ctx error rather than waiting on
+// the server.
+func TestRetryHonorsContext(t *testing.T) {
+	var hits int32
+	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		// Hold long enough for the client's ctx to fire, but bounded
+		// so test cleanup never blocks indefinitely if connection
+		// cancellation doesn't propagate.
+		timer := time.NewTimer(500 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-r.Context().Done():
+		case <-timer.C:
+		}
+	})
+
+	conn, err := gorqlite.Open(srv.URL + "?disableClusterDiscovery=true")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err = conn.QueryOneContext(ctx, "SELECT 1")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error from cancelled ctx, got nil")
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("ctx-cancel didn't short-circuit: took %v", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) && !contains(err.Error(), "context deadline exceeded") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestPeerRetrySkippedAfterCtxDone seeds the connection with extra
+// peers and confirms that once the context is done, retry against
+// those peers is skipped — they'd never have responded in time
+// anyway, so reporting the deadline is more useful than reporting all
+// peers' connection failures.
+func TestPeerRetrySkippedAfterCtxDone(t *testing.T) {
+	// A single fake server that just hangs.
+	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	})
+
+	conn, err := gorqlite.Open(srv.URL + "?disableClusterDiscovery=true")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before the call
+
+	_, err = conn.QueryOneContext(ctx, "SELECT 1")
+	if err == nil {
+		t.Fatal("expected error from cancelled ctx, got nil")
+	}
+	// The error message should mention "context canceled", not the
+	// peer-failure aggregate.
+	if !contains(err.Error(), "context canceled") {
+		t.Errorf("expected context.Canceled propagation, got: %v", err)
+	}
+}
+
+func contains(s, sub string) bool {
+	return strings.Contains(s, sub)
 }

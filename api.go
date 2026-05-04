@@ -1,8 +1,5 @@
 package gorqlite
 
-// Low-level transport: rqliteApiCall, rqliteApiGet, rqliteApiPost.
-// Nothing here is exported.
-
 import (
 	"bytes"
 	"context"
@@ -23,6 +20,10 @@ type ParameterizedStatement struct {
 // rqliteApiCall executes one HTTP request, retrying against each
 // known peer in turn. Returns the body of the first 2xx response, or
 // a combined error listing every peer's failure.
+//
+// If the supplied context is already done before or between attempts,
+// the call short-circuits and returns ctx.Err(): walking the rest of
+// the peer list buys nothing once the caller has given up.
 func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, method string, requestBody []byte) ([]byte, error) {
 	peers := conn.snapshotPeerList()
 	if len(peers) < 1 {
@@ -33,6 +34,10 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	var failureLog []string
 
 	for i, p := range peers {
+		if err := ctx.Err(); err != nil {
+			trace("%s: ctx done before peer %d, aborting retries", conn.ID, i)
+			return nil, err
+		}
 		trace("%s: attempting to contact peer %d", conn.ID, i)
 		url := conn.assembleURL(apiOp, p)
 
@@ -52,8 +57,8 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	return nil, errors.New(builder.String())
 }
 
-// doOnce performs a single HTTP attempt. Body is closed before
-// returning regardless of outcome.
+// doOnce performs a single HTTP attempt. The response body is closed
+// before returning regardless of outcome.
 func (conn *Connection) doOnce(ctx context.Context, method, url string, requestBody []byte) ([]byte, error) {
 	var bodyReader io.Reader
 	if requestBody != nil {
@@ -89,8 +94,8 @@ func (conn *Connection) doOnce(ctx context.Context, method, url string, requestB
 	return responseBody, nil
 }
 
-// redactURL replaces the userinfo (username:password) of url with the
-// mask used by net/url's Redacted helper. Returns "" if the url is
+// redactURL replaces the userinfo portion of url with the mask
+// produced by net/url's Redacted helper. Returns "" if the url is
 // malformed.
 func redactURL(url string) string {
 	u, err := nurl.Parse(url)
@@ -113,7 +118,7 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 }
 
 // rqliteApiPost is the POST variant, used for query/write/request.
-// It serializes the parameterized statements into rqlite's
+// It serialises the parameterized statements into rqlite's
 // nested-array body format.
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
 	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_WRITE_QUEUED && apiOp != api_REQUEST {

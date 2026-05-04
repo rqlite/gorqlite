@@ -6,34 +6,6 @@ import (
 	"errors"
 )
 
-/* *****************************************************************
-
-   method: Connection.Write()
-
-	This is the JSON we get back:
-
-{
-    "results": [
-        {
-            "last_insert_id": 1,
-            "rows_affected": 1,
-            "time": 0.00759015
-        }
-    ],
-    "time": 0.869015
-}
-
-	or
-
-{
-    "results": [
-        {"error": "table foo already exists"}
-    ],
-    "time": 0.18472685400000002
-}
-
- * *****************************************************************/
-
 // firstWriteResult returns wra[0] or a zero WriteResult if empty,
 // avoiding panics on an unexpected/empty server response.
 func firstWriteResult(wra []WriteResult) WriteResult {
@@ -43,7 +15,7 @@ func firstWriteResult(wra []WriteResult) WriteResult {
 	return wra[0]
 }
 
-// WriteOne wraps Write() into a single-statement method.
+// WriteOne wraps Write into a single-statement method.
 //
 // WriteOne uses context.Background() internally; to specify the context, use WriteOneContext.
 func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error) {
@@ -51,13 +23,13 @@ func (conn *Connection) WriteOne(sqlStatement string) (wr WriteResult, err error
 	return firstWriteResult(wra), err
 }
 
-// WriteOneContext wraps WriteContext() into a single-statement
+// WriteOneContext wraps WriteContext into a single-statement method.
 func (conn *Connection) WriteOneContext(ctx context.Context, sqlStatement string) (wr WriteResult, err error) {
 	wra, err := conn.WriteContext(ctx, []string{sqlStatement})
 	return firstWriteResult(wra), err
 }
 
-// WriteOneParameterized wraps WriteParameterized() into a single-statement method.
+// WriteOneParameterized wraps WriteParameterized into a single-statement method.
 //
 // WriteOneParameterized uses context.Background() internally; to specify the context, use WriteOneParameterizedContext.
 func (conn *Connection) WriteOneParameterized(statement ParameterizedStatement) (wr WriteResult, err error) {
@@ -72,7 +44,7 @@ func (conn *Connection) WriteOneParameterizedContext(ctx context.Context, statem
 	return firstWriteResult(wra), err
 }
 
-// Write is used to perform DDL/DML in the database synchronously without parameters.
+// Write performs DDL/DML synchronously without parameters.
 //
 // Write uses context.Background() internally; to specify the context, use WriteContext.
 // To use Write with parameterized queries, use WriteParameterized.
@@ -80,7 +52,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 	return conn.WriteContext(context.Background(), sqlStatements)
 }
 
-// WriteContext is used to perform DDL/DML in the database synchronously without parameters.
+// WriteContext performs DDL/DML synchronously without parameters.
 //
 // To use WriteContext with parameterized queries, use WriteParameterizedContext.
 func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string) (results []WriteResult, err error) {
@@ -94,18 +66,19 @@ func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string
 	return conn.WriteParameterizedContext(ctx, parameterizedStatements)
 }
 
-// WriteParameterized is used to perform DDL/DML in the database synchronously.
+// WriteParameterized performs DDL/DML synchronously.
 //
-// WriteParameterized takes an array of SQL statements, and returns an equal-sized array of WriteResults,
-// each corresponding to the SQL statement that produced it.
+// It takes a slice of statements and returns a same-length slice of
+// WriteResults; statement N's result lives in results[N]. All
+// statements run in a single rqlite transaction.
 //
-// All statements are executed as a single transaction.
+// The returned error is non-nil when the API call itself failed (and
+// then results contains a single error-bearing element), or when one
+// or more statements failed. Inspect each result's Err for
+// per-statement errors.
 //
-// WriteParameterized returns an error if one is encountered during its operation.
-// If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, you can look at the individual statement's Err for more info.
-//
-// WriteParameterized uses context.Background() internally; to specify the context, use WriteParameterizedContext.
+// WriteParameterized uses context.Background() internally; to specify
+// the context, use WriteParameterizedContext.
 func (conn *Connection) WriteParameterized(sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
 	return conn.WriteParameterizedContext(context.Background(), sqlStatements)
 }
@@ -131,16 +104,7 @@ func (conn *Connection) parseWriteResult(r resultJSON) WriteResult {
 	return wr
 }
 
-// WriteParameterizedContext is used to perform DDL/DML in the database synchronously.
-//
-// WriteParameterizedContext takes an array of SQL statements, and returns an equal-sized array of WriteResults,
-// each corresponding to the SQL statement that produced it.
-//
-// All statements are executed as a single transaction.
-//
-// WriteParameterizedContext returns an error if one is encountered during its operation.
-// If it's something like a call to the rqlite API, then it'll return that error.
-// If one statement out of several has an error, you can look at the individual statement's Err for more info.
+// WriteParameterizedContext is the context-aware version of WriteParameterized.
 func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (results []WriteResult, err error) {
 	results = make([]WriteResult, 0)
 
@@ -167,7 +131,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	}
 
 	if resp.Results == nil {
-		err = errors.New("result key is missing from response")
+		err = errors.New("results key is missing from response")
 		trace("%s: missing results key: %s", conn.ID, err)
 		results = append(results, WriteResult{Err: err})
 		return results, err
@@ -189,32 +153,34 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 	return results, joinErrors(errs...)
 }
 
-// QueueOne is a convenience method that wraps Queue into a single-statement.
+// QueueOne wraps Queue into a single-statement method.
 //
 // QueueOne uses context.Background() internally; to specify the context, use QueueOneContext.
 func (conn *Connection) QueueOne(sqlStatement string) (seq int64, err error) {
 	return conn.QueueContext(context.Background(), []string{sqlStatement})
 }
 
-// QueueOneContext is a convenience method that wraps QueueContext into a single-statement
+// QueueOneContext wraps QueueContext into a single-statement method.
 func (conn *Connection) QueueOneContext(ctx context.Context, sqlStatement string) (seq int64, err error) {
 	return conn.QueueContext(ctx, []string{sqlStatement})
 }
 
-// QueueOneParameterized is a convenience method that wraps QueueParameterized into a single-statement method.
+// QueueOneParameterized wraps QueueParameterized into a single-statement method.
 //
 // QueueOneParameterized uses context.Background() internally; to specify the context, use QueueOneParameterizedContext.
 func (conn *Connection) QueueOneParameterized(statement ParameterizedStatement) (seq int64, err error) {
 	return conn.QueueParameterized([]ParameterizedStatement{statement})
 }
 
-// QueueOneParameterizedContext is a convenience method that wraps QueueParameterizedContext() into a single-statement method.
+// QueueOneParameterizedContext wraps QueueParameterizedContext into a single-statement method.
 func (conn *Connection) QueueOneParameterizedContext(ctx context.Context, statement ParameterizedStatement) (seq int64, err error) {
 	return conn.QueueParameterizedContext(ctx, []ParameterizedStatement{statement})
 }
 
-// Queue is used to perform asynchronous writes to the rqlite database as defined in the documentation:
-// https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md
+// Queue performs asynchronous (queued) writes to the rqlite database,
+// as described in https://rqlite.io/docs/api/queued-writes/. The
+// returned sequence number can be used to wait for the writes to be
+// applied.
 //
 // Queue uses context.Background() internally; to specify the context, use QueueContext.
 // To use Queue with parameterized queries, use QueueParameterized.
@@ -222,8 +188,7 @@ func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 	return conn.QueueContext(context.Background(), sqlStatements)
 }
 
-// QueueContext is used to perform asynchronous writes to the rqlite database as defined in the documentation:
-// https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md
+// QueueContext is the context-aware version of Queue.
 //
 // To use QueueContext with parameterized queries, use QueueParameterizedContext.
 func (conn *Connection) QueueContext(ctx context.Context, sqlStatements []string) (seq int64, err error) {
@@ -235,18 +200,14 @@ func (conn *Connection) QueueContext(ctx context.Context, sqlStatements []string
 	return conn.QueueParameterizedContext(ctx, parameterizedStatements)
 }
 
-// QueueParameterized is used to perform asynchronous writes with parameterized queries
-// to the rqlite database as defined in the documentation:
-// https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md
+// QueueParameterized performs queued writes with parameter binding.
 //
 // QueueParameterized uses context.Background() internally; to specify the context, use QueueParameterizedContext.
 func (conn *Connection) QueueParameterized(sqlStatements []ParameterizedStatement) (seq int64, err error) {
 	return conn.QueueParameterizedContext(context.Background(), sqlStatements)
 }
 
-// QueueParameterizedContext is used to perform asynchronous writes with parameterized queries
-// to the rqlite database as defined in the documentation:
-// https://github.com/rqlite/rqlite/blob/master/DOC/QUEUED_WRITES.md
+// QueueParameterizedContext is the context-aware version of QueueParameterized.
 func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatements []ParameterizedStatement) (seq int64, err error) {
 	if conn.isClosed() {
 		return 0, ErrClosed
@@ -273,9 +234,9 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 	return *resp.SequenceNumber, nil
 }
 
-// WriteResult holds the result of a single statement sent to Write().
+// WriteResult holds the result of a single statement sent to Write.
 //
-// Write() returns an array of WriteResult vars, while WriteOne() returns a single WriteResult.
+// Write returns a slice of WriteResult; WriteOne returns a single one.
 type WriteResult struct {
 	Err          error // don't trust the rest if this isn't nil
 	Timing       float64

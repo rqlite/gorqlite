@@ -1,23 +1,11 @@
 package gorqlite
 
-/*
-	this file holds most of the cluster-related stuff:
-
-	types:
-		peer
-		rqliteCluster
-	Connection methods:
-		assembleURL (from a peer)
-		updateClusterInfo (does the full cluster discovery via status)
-*/
-
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	nurl "net/url"
-	"strings"
 )
 
 // peer is an internal type representing a single hostname:port.
@@ -27,71 +15,57 @@ type peer string
 type rqliteCluster struct {
 	leader     peer
 	otherPeers []peer
-	// cached list of peers starting with leader
+	// peerList is the cached leader-then-others retry order.
 	peerList []peer
-	conn     *Connection
 }
 
-// PeerList lists the peers within a rqlite cluster, leader first.
-//
-// It returns the cached peer list assembled by updateClusterInfo,
-// allowing callers to walk the cluster in retry order without
-// rebuilding the list on every API call.
-func (rc *rqliteCluster) PeerList() []peer {
-	return rc.peerList
-}
-
-// assembleURL composes the full URL for an API call against the given
-// peer.
-//
-// e.g.: https://mary:secret2@server1.example.com:1234/db/query?transaction&level=strong
-//
-// Lives on Connection rather than peer because the credentials and
-// consistency level are connection-scoped.
+// assembleURL composes the full URL for an API call against the
+// given peer. It uses url.URL so credentials and path components are
+// escaped correctly even when they contain reserved characters.
 func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
-	var builder strings.Builder
-
+	u := nurl.URL{
+		Host: string(p),
+	}
 	if conn.wantsHTTPS {
-		builder.WriteString("https")
+		u.Scheme = "https"
 	} else {
-		builder.WriteString("http")
+		u.Scheme = "http"
 	}
-	builder.WriteString("://")
-	if conn.username != "" && conn.password != "" {
-		builder.WriteString(nurl.PathEscape(conn.username))
-		builder.WriteString(":")
-		builder.WriteString(nurl.PathEscape(conn.password))
-		builder.WriteString("@")
+	if conn.username != "" {
+		u.User = nurl.UserPassword(conn.username, conn.password)
 	}
-	builder.WriteString(string(p))
 
 	switch apiOp {
 	case api_STATUS:
-		builder.WriteString("/status")
+		u.Path = "/status"
 	case api_NODES:
-		builder.WriteString("/nodes")
+		u.Path = "/nodes"
 	case api_QUERY:
-		builder.WriteString("/db/query")
+		u.Path = "/db/query"
 	case api_WRITE, api_WRITE_QUEUED:
-		builder.WriteString("/db/execute")
+		u.Path = "/db/execute"
 	case api_REQUEST:
-		builder.WriteString("/db/request")
+		u.Path = "/db/request"
 	}
 
 	if apiOp == api_QUERY || apiOp == api_WRITE || apiOp == api_WRITE_QUEUED || apiOp == api_REQUEST {
-		builder.WriteString("?timings&level=")
-		builder.WriteString(consistencyLevelToString[conn.getConsistencyLevel()])
+		// rqlite accepts bare flag-style params like ?timings & ?queue,
+		// not key=value. Build the raw query directly to preserve that
+		// shape; the level value is always one of a small fixed set so
+		// no escaping is needed.
+		q := "timings&level=" + consistencyLevelToString[conn.getConsistencyLevel()]
 		if conn.getWantsTransactions() {
-			builder.WriteString("&transaction")
+			q += "&transaction"
 		}
 		if apiOp == api_WRITE_QUEUED {
-			builder.WriteString("&queue")
+			q += "&queue"
 		}
+		u.RawQuery = q
 	}
 
-	trace("%s: assembled URL for %s: %s", conn.ID, apiOpName(apiOp), redactURL(builder.String()))
-
-	return builder.String()
+	out := u.String()
+	trace("%s: assembled URL for %s: %s", conn.ID, apiOpName(apiOp), redactURL(out))
+	return out
 }
 
 func apiOpName(op apiOperation) string {
@@ -116,7 +90,7 @@ func apiOpName(op apiOperation) string {
 type statusResponse struct {
 	Store struct {
 		// "leader" can be either a string (raft addr, 5.x) or a struct
-		// (6.0+). We decode it with json.RawMessage and re-parse below.
+		// (6.0+). Decode it lazily and re-parse below.
 		Leader   json.RawMessage              `json:"leader"`
 		Metadata map[string]map[string]string `json:"metadata"`
 	} `json:"store"`
@@ -137,26 +111,24 @@ type nodesResponse map[string]struct {
 func (conn *Connection) updateClusterInfo() error {
 	trace("%s: updateClusterInfo() called", conn.ID)
 
-	rc := rqliteCluster{conn: conn}
+	rc := rqliteCluster{}
 
 	responseBody, err := conn.rqliteApiGet(context.Background(), api_STATUS)
 	if err != nil {
 		return err
 	}
-	trace("%s: updateClusterInfo() back from api call OK", conn.ID)
+	trace("%s: updateClusterInfo() back from /status OK", conn.ID)
 
 	var status statusResponse
 	if err := json.Unmarshal(responseBody, &status); err != nil {
 		return fmt.Errorf("could not parse /status response: %w", err)
 	}
 
-	// Decode the leader field, which can be either a string (raft
-	// address, 5.x) or an object with node_id (6.0+).
 	leaderRaftAddr, err := parseLeaderRaftAddr(status.Store.Leader)
 	if err != nil {
 		return err
 	}
-	trace("%s: leader from store section is %s", conn.ID, leaderRaftAddr)
+	trace("%s: leader from /status is %s", conn.ID, leaderRaftAddr)
 
 	// In 5.x, "metadata" maps raft addr -> {api_addr, ...}, so we can
 	// translate the raft address we got into the HTTP API address.
@@ -168,16 +140,16 @@ func (conn *Connection) updateClusterInfo() error {
 
 	if rc.leader == "" {
 		// 6.0+: fall back to /nodes for the api address.
-		trace("getting leader from metadata failed, trying nodes/")
+		trace("metadata didn't carry an api_addr; falling back to /nodes")
 		responseBody, err := conn.rqliteApiGet(context.Background(), api_NODES)
 		if err != nil {
-			return errors.New("could not determine leader from API nodes call")
+			return fmt.Errorf("could not determine leader from /nodes call: %w", err)
 		}
-		trace("%s: updateClusterInfo() back from api call OK", conn.ID)
+		trace("%s: updateClusterInfo() back from /nodes OK", conn.ID)
 
 		var nodes nodesResponse
 		if err := json.Unmarshal(responseBody, &nodes); err != nil {
-			return errors.New("could not unmarshal nodes/ response")
+			return fmt.Errorf("could not unmarshal /nodes response: %w", err)
 		}
 
 		for _, v := range nodes {
@@ -187,7 +159,7 @@ func (conn *Connection) updateClusterInfo() error {
 
 			u, err := nurl.Parse(v.APIAddr)
 			if err != nil {
-				return errors.New("could not parse API address")
+				return fmt.Errorf("could not parse api_addr %q: %w", v.APIAddr, err)
 			}
 
 			if v.Leader {
@@ -202,11 +174,7 @@ func (conn *Connection) updateClusterInfo() error {
 
 	rc.peerList = buildPeerList(rc.leader, rc.otherPeers)
 
-	trace("%s: here is my cluster config:", conn.ID)
-	trace("%s: leader   : %s", conn.ID, rc.leader)
-	for n, v := range rc.otherPeers {
-		trace("%s: otherPeer #%d: %s", conn.ID, n, v)
-	}
+	trace("%s: cluster: leader=%s otherPeers=%v", conn.ID, rc.leader, rc.otherPeers)
 
 	conn.setCluster(rc)
 

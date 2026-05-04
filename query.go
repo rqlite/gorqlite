@@ -51,35 +51,6 @@ type NullTime struct {
 	Valid bool // Valid is true if Time is not NULL
 }
 
-/* *****************************************************************
-
-   method: Connection.Query()
-
-	This is the JSON we get back:
-
-{
-    "results": [
-        {
-            "columns": ["id", "name"],
-            "types": ["integer", "text"],
-            "values": [[1, "fiona"], [2, "sinead"]],
-            "time": 0.0150043
-        }
-    ],
-    "time": 0.0220043
-}
-
-	or
-
-{
-    "results": [
-        {"error": "near \"nonsense\": syntax error"}
-    ],
-    "time": 2.478862
-}
-
- * *****************************************************************/
-
 // resultJSON is the unmarshal target for one element of the "results"
 // array returned by /db/query, /db/execute and /db/request. It holds
 // every field any of those endpoints may return.
@@ -244,21 +215,12 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 	return results, joinErrors(errs...)
 }
 
-/* *****************************************************************
-
-   type: QueryResult
-
- * *****************************************************************/
-
-// QueryResult holds the results of a call to Query().  You could think of it as a rowset.
+// QueryResult holds the results of a call to Query — effectively a rowset.
 //
-// So if you were to query:
+// For "SELECT id, name FROM some_table", a QueryResult holds any errors
+// produced by the query, the column names and types, and the rows.
 //
-//	SELECT id, name FROM some_table;
-//
-// then a QueryResult would hold any errors from that query, a list of columns and types, and the actual row values.
-//
-// Query() returns an array of QueryResult vars, while QueryOne() returns a single variable.
+// Query returns a slice of QueryResult; QueryOne returns a single one.
 type QueryResult struct {
 	conn      *Connection
 	Err       error
@@ -269,67 +231,90 @@ type QueryResult struct {
 	rowNumber int64
 }
 
+// errCallNextFirst is returned by Map, Slice, and Scan when called
+// before the first Next, since rowNumber is otherwise out of range.
+var errCallNextFirst = errors.New("gorqlite: call Next() before Map/Slice/Scan")
+
+// errMalformedRow is returned when a row in the server response has
+// fewer values than the column list claims, which would otherwise
+// cause an out-of-bounds index. Real rqlite never produces these, but
+// proxies, mocks, and middlewares can.
+var errMalformedRow = errors.New("gorqlite: row has fewer values than columns declared")
+
 // Columns returns a list of the column names for this QueryResult.
 func (qr *QueryResult) Columns() []string {
 	return qr.columns
 }
 
-// Map returns the current row (as advanced by Next()) as a map[string]interface{}.
+// Map returns the current row (advanced by Next) as a
+// map[columnName]value.
 //
-// The key is a string corresponding to a column name.
-// The value is the corresponding column.
-//
-// Note that only json values are supported, so you will need to type the interface{} accordingly.
+// Date and datetime columns are converted to time.Time; everything
+// else is whatever encoding/json produced — usually float64 for
+// numbers, string for text, nil for NULL.
 func (qr *QueryResult) Map() (map[string]interface{}, error) {
 	trace("%s: Map() called for row %d", qr.conn.ID, qr.rowNumber)
-	ans := make(map[string]interface{})
-
 	if qr.rowNumber == -1 {
-		return ans, errors.New("you need to Next() before you Map(), sorry, it's complicated")
+		return nil, errCallNextFirst
 	}
 
-	thisRowValues := qr.values[qr.rowNumber]
-	for i := 0; i < len(qr.columns); i++ {
-		switch qr.types[i] {
+	row := qr.values[qr.rowNumber]
+	if len(row) < len(qr.columns) {
+		return nil, errMalformedRow
+	}
+
+	ans := make(map[string]interface{}, len(qr.columns))
+	for i, col := range qr.columns {
+		typ := ""
+		if i < len(qr.types) {
+			typ = qr.types[i]
+		}
+		switch typ {
 		case "date", "datetime":
-			if thisRowValues[i] != nil {
-				t, err := toTime(thisRowValues[i])
+			if row[i] != nil {
+				t, err := toTime(row[i])
 				if err != nil {
-					return ans, err
+					return nil, err
 				}
-				ans[qr.columns[i]] = t
+				ans[col] = t
 			} else {
-				ans[qr.columns[i]] = nil
+				ans[col] = nil
 			}
 		default:
-			ans[qr.columns[i]] = thisRowValues[i]
+			ans[col] = row[i]
 		}
 	}
 
 	return ans, nil
 }
 
-// Slice returns the current row (as advanced by Next()) as a []interface{}.
+// Slice returns the current row (advanced by Next) as a []interface{}.
+// The slice is freshly allocated; the values inside it are the same
+// references the QueryResult holds, so don't mutate them.
 //
-// The slice is a shallow copy of the internal representation of the row data.
-//
-// Note that only json values are supported, so you will need to type the interface{} accordingly.
+// Date and datetime columns are converted to time.Time; everything
+// else is whatever encoding/json produced — usually float64 for
+// numbers, string for text, nil for NULL.
 func (qr *QueryResult) Slice() ([]interface{}, error) {
 	trace("%s: Slice() called", qr.conn.ID)
 
 	if qr.rowNumber == -1 {
-		return nil, errors.New("you need to Next() before you Slice(), sorry, it's complicated")
+		return nil, errCallNextFirst
 	}
 
-	thisRowValues := qr.values[qr.rowNumber]
-	ans := make([]interface{}, len(thisRowValues))
-	for i, v := range thisRowValues {
-		switch qr.types[i] {
+	row := qr.values[qr.rowNumber]
+	ans := make([]interface{}, len(row))
+	for i, v := range row {
+		typ := ""
+		if i < len(qr.types) {
+			typ = qr.types[i]
+		}
+		switch typ {
 		case "date", "datetime":
 			if v != nil {
 				t, err := toTime(v)
 				if err != nil {
-					return ans, err
+					return nil, err
 				}
 				ans[i] = t
 			} else {
@@ -342,16 +327,18 @@ func (qr *QueryResult) Slice() ([]interface{}, error) {
 	return ans, nil
 }
 
-// Next positions the QueryResult result pointer so that Scan() or Map() is ready.
+// Next advances the result cursor to the next row. The first call
+// positions on row 0; subsequent calls advance by one. It returns
+// false when no more rows remain.
 //
-// You should call Next() first, but gorqlite will fix it if you call Map() or Scan() before
-// the initial Next().
+// Map, Slice, and Scan all require Next to have been called first;
+// they return an error otherwise.
 //
 // A common idiom:
 //
-//	rows := conn.Write(something)
+//	rows, err := conn.QueryOne("SELECT ...")
 //	for rows.Next() {
-//	    // your Scan/Map and processing here.
+//	    rows.Scan(&dst)
 //	}
 func (qr *QueryResult) Next() bool {
 	if qr.rowNumber >= int64(len(qr.values)-1) {
@@ -388,32 +375,40 @@ func toTime(src interface{}) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid time type:%T val:%v", src, src)
 }
 
-// Scan takes a list of pointers and then updates them to reflect the current row's data.
+// Scan copies the current row's columns into the destinations supplied.
 //
-// Note that only the following data types are used, and they
-// are a subset of the types JSON uses:
+// Each destination must be a pointer to a supported type:
 //
-//	string, for JSON strings
-//	float64, for JSON numbers
-//	int64, as a convenient extension
-//	nil for JSON null
+//	*string, *[]byte
+//	*int, *int64, *float64
+//	*bool (parsed from "1"/"0", "true"/"false", etc.)
+//	*time.Time
+//	*NullString, *NullInt64, *NullInt32, *NullInt16,
+//	*NullFloat64, *NullBool, *NullTime
 //
-// booleans, JSON arrays, and JSON objects are not supported,
-// since sqlite does not support them.
+// JSON numbers come back as float64 from the rqlite API; gorqlite
+// converts them to the destination's underlying type for you.
+//
+// A NULL column is left unchanged for primitive destinations and
+// recorded as Valid=false on Null* destinations.
 func (qr *QueryResult) Scan(dest ...interface{}) error {
 	trace("%s: Scan() called for %d vars", qr.conn.ID, len(dest))
 
 	if qr.rowNumber == -1 {
-		return errors.New("you need to Next() before you Scan(), sorry, it's complicated")
+		return errCallNextFirst
 	}
 
 	if len(dest) != len(qr.columns) {
 		return fmt.Errorf("expected %d columns but got %d vars", len(qr.columns), len(dest))
 	}
 
-	thisRowValues := qr.values[qr.rowNumber]
+	row := qr.values[qr.rowNumber]
+	if len(row) < len(dest) {
+		return errMalformedRow
+	}
+
 	for n, d := range dest {
-		src := thisRowValues[n]
+		src := row[n]
 		switch d := d.(type) {
 		case *time.Time:
 			if src == nil {
@@ -485,11 +480,8 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
 			}
 		case *bool:
-			// Note: Rqlite does not support bool, but this is a loop from dest
-			// meaning, the user might be targeting to a bool-type variable.
-			// Per Go convention, and per strconv.ParseBool documentation, bool might be
-			// coming from value of "1", "t", "T", "TRUE", "true", "True", for `true` and
-			// "0", "f", "F", "FALSE", "false", "False" for `false`
+			// rqlite has no native bool: integers 0/1 and strings
+			// like "true"/"false" are accepted, per strconv.ParseBool.
 			switch src := src.(type) {
 			case float64:
 				b, err := strconv.ParseBool(strconv.FormatFloat(src, 'g', -1, 64))
@@ -520,6 +512,8 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				*d = src
 			case string:
 				*d = []byte(src)
+			case nil:
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid []byte col:%d type:%T val:%v", n, src, src)
 			}
@@ -643,11 +637,10 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 	return nil
 }
 
-// Types returns an array of the column's types.
-//
-// Note that sqlite will repeat the type you tell it, but in many cases, it's ignored.  See https://www.sqlite.org/datatype3.html
-//
-// This info may additionally conflict with the reality that your data is being JSON encoded/decoded.
+// Types returns the column types declared by the SELECT — note that
+// SQLite's type affinity rules mean these are advisory and may
+// disagree with the actual stored value. See
+// https://www.sqlite.org/datatype3.html.
 func (qr *QueryResult) Types() []string {
 	return qr.types
 }

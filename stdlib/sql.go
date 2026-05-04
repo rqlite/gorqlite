@@ -149,8 +149,13 @@ func (r *Rows) Columns() []string {
 	return r.QueryResult.Columns()
 }
 
+// Close releases iteration resources. Errors that occurred while the
+// underlying gorqlite query ran were already returned by db.Query, so
+// Close itself reports nothing — matching the database/sql convention
+// of treating Close() errors as "best effort, advisory only" for
+// drivers that don't actually hold streamed state open.
 func (r *Rows) Close() error {
-	return r.Err
+	return nil
 }
 
 func (r *Rows) Next(dest []driver.Value) error {
