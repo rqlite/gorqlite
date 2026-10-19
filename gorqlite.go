@@ -22,12 +22,12 @@ import (
 type apiOperation int
 
 const (
-	api_QUERY apiOperation = iota
-	api_STATUS
-	api_WRITE
-	api_WRITE_QUEUED
-	api_NODES
-	api_REQUEST
+	apiQuery apiOperation = iota
+	apiStatus
+	apiWrite
+	apiWriteQueued
+	apiNodes
+	apiRequest
 )
 
 func init() {

@@ -30,7 +30,7 @@ func joinErrors(errs ...error) error {
 // Error returns a string representation of the statement errors.
 func (errs StatementErrors) Error() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("there were %d statement errors", len(errs)))
+	fmt.Fprintf(&sb, "there were %d statement errors", len(errs))
 	for _, err := range errs {
 		sb.WriteString("\n")
 		sb.WriteString(err.Error())

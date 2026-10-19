@@ -196,7 +196,7 @@ func TestAssembleURL_EmptyPasswordKeepsUsername(t *testing.T) {
 		password:         "",
 		consistencyLevel: ConsistencyLevelWeak,
 	}
-	url := conn.assembleURL(api_QUERY, peer("host:1234"))
+	url := conn.assembleURL(apiQuery, peer("host:1234"))
 	// url.Redacted masks anything after `user:`, so we look for "alice@"
 	// being present (with or without colon) by parsing.
 	if !contains(url, "alice@") && !contains(url, "alice:@") {
@@ -211,7 +211,7 @@ func TestAssembleURL_SpecialCharsInPasswordEscaped(t *testing.T) {
 		password:         "p@ss/word",
 		consistencyLevel: ConsistencyLevelWeak,
 	}
-	url := conn.assembleURL(api_QUERY, peer("host:1234"))
+	url := conn.assembleURL(apiQuery, peer("host:1234"))
 	// Plain "p@ss/word" should NOT appear unescaped.
 	if contains(url, "p@ss/word") {
 		t.Errorf("password not escaped in URL: %q", url)
@@ -224,7 +224,7 @@ func TestAssembleURL_QueueOpAddsQueueParam(t *testing.T) {
 		consistencyLevel:  ConsistencyLevelWeak,
 		wantsTransactions: false,
 	}
-	url := conn.assembleURL(api_WRITE_QUEUED, peer("host:1234"))
+	url := conn.assembleURL(apiWriteQueued, peer("host:1234"))
 	if !contains(url, "&queue") {
 		t.Errorf("expected &queue in queued-write URL, got %q", url)
 	}
@@ -236,7 +236,7 @@ func TestAssembleURL_NormalWriteHasNoQueueParam(t *testing.T) {
 		consistencyLevel:  ConsistencyLevelWeak,
 		wantsTransactions: false,
 	}
-	url := conn.assembleURL(api_WRITE, peer("host:1234"))
+	url := conn.assembleURL(apiWrite, peer("host:1234"))
 	if contains(url, "queue") {
 		t.Errorf("normal write should not carry queue param, got %q", url)
 	}

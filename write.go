@@ -108,7 +108,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiWrite, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, WriteResult{Err: err})
@@ -210,7 +210,7 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Queue() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_WRITE_QUEUED, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiWriteQueued, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		return 0, err

@@ -63,7 +63,7 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	var builder strings.Builder
 	builder.WriteString("tried all peers unsuccessfully. here are the results:\n")
 	for n, v := range failureLog {
-		builder.WriteString(fmt.Sprintf("   peer #%d: %s\n", n, v))
+		fmt.Fprintf(&builder, "   peer #%d: %s\n", n, v)
 	}
 	return nil, errors.New(builder.String())
 }
@@ -121,7 +121,7 @@ func redactURL(url string) string {
 func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([]byte, error) {
 	trace("%s: rqliteApiGet() called", conn.ID)
 
-	if apiOp != api_STATUS && apiOp != api_NODES {
+	if apiOp != apiStatus && apiOp != apiNodes {
 		return nil, errors.New("rqliteApiGet() called for invalid api operation")
 	}
 
@@ -132,7 +132,7 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 // It serialises the parameterized statements into rqlite's
 // nested-array body format.
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
-	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_WRITE_QUEUED && apiOp != api_REQUEST {
+	if apiOp != apiQuery && apiOp != apiWrite && apiOp != apiWriteQueued && apiOp != apiRequest {
 		return nil, errors.New("rqliteApiPost() called for invalid api operation")
 	}
 

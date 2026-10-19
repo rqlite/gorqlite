@@ -63,7 +63,7 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 	trace("%s: Request() for %d statements", conn.ID, len(sqlStatements))
 
 	before := time.Now()
-	response, err := conn.rqliteApiPost(ctx, api_REQUEST, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiRequest, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, RequestResult{Err: err})

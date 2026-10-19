@@ -175,7 +175,7 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiQuery, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, QueryResult{Err: err})
