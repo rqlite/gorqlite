@@ -127,14 +127,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 // QueryContext is used to perform SELECT operations in the database. It takes an array of SQL statements and
 // executes them in a single transaction, returning an array of QueryResult.
 func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string) (results []QueryResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.QueryParameterizedContext(ctx, parameterizedStatements)
+	return conn.QueryParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // QueryParameterized is used to perform SELECT operations in the database.

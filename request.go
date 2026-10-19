@@ -27,14 +27,7 @@ func (conn *Connection) Request(sqlStatements []string) (results []RequestResult
 //
 // To use RequestContext with parameterized queries, use RequestParameterizedContext.
 func (conn *Connection) RequestContext(ctx context.Context, sqlStatements []string) (results []RequestResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.RequestParameterizedContext(ctx, parameterizedStatements)
+	return conn.RequestParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // RequestParameterized is used to access Unified Endpoint to send read and writes requests in one operation.

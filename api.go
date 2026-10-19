@@ -17,6 +17,17 @@ type ParameterizedStatement struct {
 	Arguments []interface{}
 }
 
+// toParameterizedStatements wraps plain SQL strings as argument-less
+// ParameterizedStatements, so the string-taking methods can share the
+// parameterized implementations.
+func toParameterizedStatements(sqlStatements []string) []ParameterizedStatement {
+	out := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		out = append(out, ParameterizedStatement{Query: sqlStatement})
+	}
+	return out
+}
+
 // rqliteApiCall executes one HTTP request, retrying against each
 // known peer in turn. Returns the body of the first 200 OK response,
 // or a combined error listing every peer's failure.

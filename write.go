@@ -56,14 +56,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 //
 // To use WriteContext with parameterized queries, use WriteParameterizedContext.
 func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string) (results []WriteResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.WriteParameterizedContext(ctx, parameterizedStatements)
+	return conn.WriteParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // WriteParameterized performs DDL/DML synchronously.
@@ -199,12 +192,7 @@ func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 //
 // To use QueueContext with parameterized queries, use QueueParameterizedContext.
 func (conn *Connection) QueueContext(ctx context.Context, sqlStatements []string) (seq int64, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0)
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{Query: sqlStatement})
-	}
-
-	return conn.QueueParameterizedContext(ctx, parameterizedStatements)
+	return conn.QueueParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // QueueParameterized performs queued writes with parameter binding.
