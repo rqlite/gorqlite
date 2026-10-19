@@ -1,9 +1,9 @@
-version: 2
+version: 2.1
 jobs:
   test:
     working_directory: ~/rqlite/src/github.com/rqlite/gorqlite
     docker:
-      - image: cimg/go:1.22.0
+      - image: cimg/go:1.27.0
       - image: rqlite/rqlite:latest
     steps:
       - checkout
