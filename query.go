@@ -291,27 +291,28 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 
 	ans := make(map[string]interface{}, len(qr.columns))
 	for i, col := range qr.columns {
-		typ := ""
-		if i < len(qr.types) {
-			typ = qr.types[i]
+		v, err := qr.convertValue(i, row[i])
+		if err != nil {
+			return nil, err
 		}
-		switch typ {
-		case "date", "datetime":
-			if row[i] != nil {
-				t, err := toTime(row[i])
-				if err != nil {
-					return nil, err
-				}
-				ans[col] = t
-			} else {
-				ans[col] = nil
-			}
-		default:
-			ans[col] = row[i]
-		}
+		ans[col] = v
 	}
 
 	return ans, nil
+}
+
+// convertValue applies the per-column conversions Map and Slice
+// share: date and datetime columns become time.Time, everything else
+// is passed through as decoded from JSON.
+func (qr *QueryResult) convertValue(col int, v interface{}) (interface{}, error) {
+	if v == nil || col >= len(qr.types) {
+		return v, nil
+	}
+	switch qr.types[col] {
+	case "date", "datetime":
+		return toTime(v)
+	}
+	return v, nil
 }
 
 // Slice returns the current row (advanced by Next) as a []interface{}.
@@ -330,24 +331,11 @@ func (qr *QueryResult) Slice() ([]interface{}, error) {
 	}
 	ans := make([]interface{}, len(row))
 	for i, v := range row {
-		typ := ""
-		if i < len(qr.types) {
-			typ = qr.types[i]
+		cv, err := qr.convertValue(i, v)
+		if err != nil {
+			return nil, err
 		}
-		switch typ {
-		case "date", "datetime":
-			if v != nil {
-				t, err := toTime(v)
-				if err != nil {
-					return nil, err
-				}
-				ans[i] = t
-			} else {
-				ans[i] = nil
-			}
-		default:
-			ans[i] = v
-		}
+		ans[i] = cv
 	}
 	return ans, nil
 }

@@ -71,62 +71,54 @@ func (s *Stmt) NumInput() int {
 	return -1
 }
 
-func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+// statement binds positional driver values to the SQL text.
+func (s *Stmt) statement(args []driver.Value) gorqlite.ParameterizedStatement {
 	a := make([]interface{}, len(args))
 	for i, v := range args {
 		a[i] = v
 	}
-	stmt := gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}
-	wr, err := s.Conn.WriteOneParameterized(stmt)
-	if err != nil {
-		return &Result{wr}, err
+	return gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}
+}
+
+// namedStatement binds driver.NamedValues to the SQL text. rqlite
+// only supports positional parameters, so a named value is an error.
+func (s *Stmt) namedStatement(args []driver.NamedValue) (gorqlite.ParameterizedStatement, error) {
+	a := make([]interface{}, len(args))
+	for _, v := range args {
+		if v.Name != "" {
+			return gorqlite.ParameterizedStatement{}, fmt.Errorf("rqlite: driver does not support named parameters, but got one with name %q in statement %q", v.Name, s.Stmt)
+		}
+		a[v.Ordinal-1] = v.Value
 	}
-	return &Result{wr}, nil
+	return gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}, nil
+}
+
+func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+	wr, err := s.Conn.WriteOneParameterized(s.statement(args))
+	return &Result{wr}, err
 }
 
 func (s *Stmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
-	a := make([]interface{}, len(args))
-	for _, v := range args {
-		if v.Name != "" {
-			return nil, fmt.Errorf("rqlite: driver does not support named parameters, but got one with name %q in statement %q", v.Name, s.Stmt)
-		}
-		a[v.Ordinal-1] = v.Value
-	}
-	stmt := gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}
-	wr, err := s.Conn.WriteOneParameterizedContext(ctx, stmt)
+	stmt, err := s.namedStatement(args)
 	if err != nil {
-		return &Result{wr}, err
+		return nil, err
 	}
-	return &Result{wr}, nil
+	wr, err := s.Conn.WriteOneParameterizedContext(ctx, stmt)
+	return &Result{wr}, err
 }
 
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	a := make([]interface{}, len(args))
-	for i, v := range args {
-		a[i] = v
-	}
-	stmt := gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}
-	qr, err := s.Conn.QueryOneParameterized(stmt)
-	if err != nil {
-		return &Rows{qr}, err
-	}
-	return &Rows{qr}, nil
+	qr, err := s.Conn.QueryOneParameterized(s.statement(args))
+	return &Rows{qr}, err
 }
 
 func (s *Stmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
-	a := make([]interface{}, len(args))
-	for _, v := range args {
-		if v.Name != "" {
-			return nil, fmt.Errorf("rqlite: driver does not support named parameters, but got one with name %q in statement %q", v.Name, s.Stmt)
-		}
-		a[v.Ordinal-1] = v.Value
-	}
-	stmt := gorqlite.ParameterizedStatement{Query: s.Stmt, Arguments: a}
-	qr, err := s.Conn.QueryOneParameterizedContext(ctx, stmt)
+	stmt, err := s.namedStatement(args)
 	if err != nil {
-		return &Rows{qr}, err
+		return nil, err
 	}
-	return &Rows{qr}, nil
+	qr, err := s.Conn.QueryOneParameterizedContext(ctx, stmt)
+	return &Rows{qr}, err
 }
 
 type Result struct {
