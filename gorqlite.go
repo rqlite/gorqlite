@@ -35,7 +35,8 @@ func init() {
 }
 
 // Open creates and returns a "connection" to rqlite, using
-// the default HTTP client.
+// DefaultHTTPClient, or a dedicated client when the URL carries a
+// timeout option.
 //
 // Since rqlite is stateless, there is no actual connection.
 // Open() creates and initializes a gorqlite Connection type,
@@ -54,13 +55,17 @@ func init() {
 //	https://mary:secret2@somewhere.example.com:1234
 //	https://mary:secret2@somewhere.example.com // will use 4001
 func Open(connURL string) (*Connection, error) {
-	return OpenWithClient(connURL, DefaultHTTPClient)
+	return OpenWithClient(connURL, nil)
 }
 
 // OpenWithClient creates and returns a "connection" to rqlite,
 // and uses the given HTTP client for all connections to rqlite.
 // This allows clients to have complete control over the HTTP
 // communications between this client and the rqlite system.
+//
+// The supplied client is used as-is, so any timeout option in the
+// URL is ignored in favour of the client's own Timeout. A nil client
+// makes OpenWithClient behave exactly like Open.
 func OpenWithClient(connURL string, client *http.Client) (*Connection, error) {
 	conn := &Connection{}
 

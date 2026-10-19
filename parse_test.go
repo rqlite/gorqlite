@@ -3,6 +3,7 @@ package gorqlite
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -352,4 +353,46 @@ func TestQueryResultAccessAfterExhaustion(t *testing.T) {
 	if err := qr.Scan(&a); err != nil || a != "x" {
 		t.Errorf("Scan after exhaustion: got %q, %v", a, err)
 	}
+}
+
+// TestInitConnectionTimeoutOption pins that the timeout URL option
+// actually takes effect: Open passed DefaultHTTPClient for a while,
+// which meant the option was parsed and then discarded.
+func TestInitConnectionTimeoutOption(t *testing.T) {
+	t.Run("no option uses default client", func(t *testing.T) {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://", nil); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client != DefaultHTTPClient {
+			t.Error("expected DefaultHTTPClient to be used")
+		}
+	})
+
+	t.Run("option creates dedicated client", func(t *testing.T) {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://?timeout=3", nil); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client == DefaultHTTPClient {
+			t.Fatal("expected a dedicated client, got DefaultHTTPClient")
+		}
+		if conn.client.Timeout != 3*time.Second {
+			t.Errorf("timeout: got %v, want 3s", conn.client.Timeout)
+		}
+	})
+
+	t.Run("supplied client wins over option", func(t *testing.T) {
+		custom := &http.Client{Timeout: 7 * time.Second}
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://?timeout=3", custom); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client != custom {
+			t.Error("expected the supplied client to be retained")
+		}
+		if conn.client.Timeout != 7*time.Second {
+			t.Errorf("timeout: got %v, want 7s", conn.client.Timeout)
+		}
+	})
 }

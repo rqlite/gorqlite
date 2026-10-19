@@ -209,8 +209,9 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 // initConnection parses the user-supplied URL, extracts credentials
 // and options, and sets up the connection's initial state. It does
 // not contact rqlite; Open does that as a follow-up via
-// updateClusterInfo. If httpClient is nil, a fresh *http.Client with
-// the configured timeout is used.
+// updateClusterInfo. If httpClient is nil, DefaultHTTPClient is used,
+// unless the URL carries a timeout option, in which case a dedicated
+// *http.Client with that timeout is created.
 //
 // URL format:
 //
@@ -220,7 +221,7 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //
 //	level=none|weak|linearizable|strong  consistency level (default: weak)
 //	disableClusterDiscovery=true|false   skip /status discovery on Open and on Leader/Peers
-//	timeout=<seconds>                    sets the default http.Client timeout (default: 10)
+//	timeout=<seconds>                    http.Client timeout; ignored when httpClient is supplied (default: 10)
 //
 // If the URL has no host the leader defaults to localhost:4001.
 func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
@@ -276,22 +277,24 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 		conn.disableClusterDiscovery = dpd
 	}
 
-	timeout := defaultTimeout
-	if v := query.Get("timeout"); v != "" {
-		customTimeout, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid timeout value %q: %w", v, err)
-		}
-		timeout = customTimeout
-	}
-
 	conn.wantsTransactions = true
 
 	conn.client = httpClient
-	if conn.client == nil {
-		conn.client = &http.Client{
-			Timeout: time.Second * time.Duration(timeout),
+	if v := query.Get("timeout"); v != "" {
+		timeout, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid timeout value %q: %w", v, err)
 		}
+		if conn.client == nil {
+			conn.client = &http.Client{
+				Timeout: time.Duration(timeout) * time.Second,
+			}
+		} else {
+			trace("%s: timeout option ignored because an http.Client was supplied", conn.ID)
+		}
+	}
+	if conn.client == nil {
+		conn.client = DefaultHTTPClient
 	}
 
 	trace("%s: initConnection done:", conn.ID)
