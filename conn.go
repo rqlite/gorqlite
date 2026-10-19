@@ -63,7 +63,7 @@ func (conn *Connection) Close() {
 	conn.mu.Lock()
 	conn.hasBeenClosed = true
 	conn.mu.Unlock()
-	trace("%s: %s", conn.ID, "closing connection")
+	trace("%s: closing connection", conn.ID)
 }
 
 // isClosed reports whether Close has been called. Read-locked because
@@ -112,7 +112,23 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.isClosed() {
 		return "", ErrClosed
 	}
-	return consistencyLevelToString[conn.getConsistencyLevel()], nil
+	return conn.getConsistencyLevel().String(), nil
+}
+
+// refreshClusterInfo re-discovers the cluster topology, unless the
+// connection was opened with discovery disabled, in which case the
+// topology from the URL is kept as-is.
+func (conn *Connection) refreshClusterInfo(caller string) error {
+	if conn.disableClusterDiscovery {
+		return nil
+	}
+	trace("%s: %s(), calling updateClusterInfo()", conn.ID, caller)
+	if err := conn.updateClusterInfo(); err != nil {
+		trace("%s: %s() got error from updateClusterInfo(): %s", conn.ID, caller, err.Error())
+		return err
+	}
+	trace("%s: %s(), updateClusterInfo() OK", conn.ID, caller)
+	return nil
 }
 
 // Leader returns the current cluster leader's API address. With cluster
@@ -122,22 +138,12 @@ func (conn *Connection) Leader() (string, error) {
 	if conn.isClosed() {
 		return "", ErrClosed
 	}
-	if conn.disableClusterDiscovery {
-		conn.mu.RLock()
-		leader := string(conn.cluster.leader)
-		conn.mu.RUnlock()
-		return leader, nil
-	}
-	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
-	if err := conn.updateClusterInfo(); err != nil {
-		trace("%s: Leader() got error from updateClusterInfo(): %s", conn.ID, err.Error())
+	if err := conn.refreshClusterInfo("Leader"); err != nil {
 		return "", err
 	}
-	trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	conn.mu.RLock()
-	leader := string(conn.cluster.leader)
-	conn.mu.RUnlock()
-	return leader, nil
+	defer conn.mu.RUnlock()
+	return string(conn.cluster.leader), nil
 }
 
 // Peers returns the current cluster peers, leader first. With cluster
@@ -147,30 +153,12 @@ func (conn *Connection) Peers() ([]string, error) {
 	if conn.isClosed() {
 		return nil, ErrClosed
 	}
-	if conn.disableClusterDiscovery {
-		conn.mu.RLock()
-		defer conn.mu.RUnlock()
-		plist := make([]string, 0, len(conn.cluster.peerList))
-		for _, p := range conn.cluster.peerList {
-			plist = append(plist, string(p))
-		}
-		return plist, nil
-	}
-
-	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
-	if err := conn.updateClusterInfo(); err != nil {
-		trace("%s: Peers() got error from updateClusterInfo(): %s", conn.ID, err.Error())
+	if err := conn.refreshClusterInfo("Peers"); err != nil {
 		return nil, err
 	}
-	trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
-
-	conn.mu.RLock()
-	defer conn.mu.RUnlock()
-	plist := make([]string, 0, 1+len(conn.cluster.otherPeers))
-	if conn.cluster.leader != "" {
-		plist = append(plist, string(conn.cluster.leader))
-	}
-	for _, p := range conn.cluster.otherPeers {
+	peers := conn.snapshotPeerList()
+	plist := make([]string, 0, len(peers))
+	for _, p := range peers {
 		plist = append(plist, string(p))
 	}
 	return plist, nil
@@ -183,7 +171,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error
 		return ErrClosed
 	}
 
-	if levelDesired < ConsistencyLevelNone || levelDesired > ConsistencyLevelStrong {
+	if _, ok := consistencyLevelToString[levelDesired]; !ok {
 		return fmt.Errorf("unknown consistency level: %d", levelDesired)
 	}
 
