@@ -18,8 +18,8 @@ type ParameterizedStatement struct {
 }
 
 // rqliteApiCall executes one HTTP request, retrying against each
-// known peer in turn. Returns the body of the first 2xx response, or
-// a combined error listing every peer's failure.
+// known peer in turn. Returns the body of the first 200 OK response,
+// or a combined error listing every peer's failure.
 //
 // If the supplied context is already done before or between attempts,
 // the call short-circuits and returns ctx.Err(): walking the rest of

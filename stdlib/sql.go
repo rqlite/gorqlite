@@ -1,4 +1,4 @@
-// Package stdlib provides a compatability layer from gorqlite to database/sql.
+// Package stdlib provides a compatibility layer from gorqlite to database/sql.
 package stdlib
 
 import (
