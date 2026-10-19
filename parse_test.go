@@ -396,3 +396,28 @@ func TestInitConnectionTimeoutOption(t *testing.T) {
 		}
 	})
 }
+
+// TestInitConnectionRejectsBadScheme pins that only http and https
+// are accepted. The old prefix check let "httpx://" and friends
+// through and silently treated them as plain http.
+func TestInitConnectionRejectsBadScheme(t *testing.T) {
+	for _, url := range []string{"", "localhost:4001", "ftp://localhost:4001", "httpx://localhost:4001"} {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection(url, nil); err == nil {
+			t.Errorf("%q: expected error, got nil", url)
+		}
+	}
+	for _, url := range []string{"http://", "https://host:1", "HTTP://host:1"} {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection(url, nil); err != nil {
+			t.Errorf("%q: unexpected error: %v", url, err)
+		}
+	}
+	conn := &Connection{ID: "test"}
+	if err := conn.initConnection("https://host:1", nil); err != nil {
+		t.Fatalf("initConnection: %v", err)
+	}
+	if !conn.wantsHTTPS {
+		t.Error("https scheme should set wantsHTTPS")
+	}
+}

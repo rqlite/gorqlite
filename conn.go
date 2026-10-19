@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -225,22 +224,19 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //
 // If the URL has no host the leader defaults to localhost:4001.
 func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
-	if len(url) < 7 {
-		return errors.New("url specified is impossibly short")
-	}
-
-	if !strings.HasPrefix(url, "http") {
-		return errors.New("url does not start with 'http'")
-	}
-
 	u, err := nurl.Parse(url)
 	if err != nil {
 		return err
 	}
 	trace("%s: net.url.Parse() OK", conn.ID)
 
-	if u.Scheme == "https" {
+	switch u.Scheme {
+	case "http":
+		conn.wantsHTTPS = false
+	case "https":
 		conn.wantsHTTPS = true
+	default:
+		return fmt.Errorf("url scheme must be http or https, got %q", u.Scheme)
 	}
 
 	if u.User != nil {
