@@ -130,9 +130,16 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 		return results, err
 	}
 
+	if resp.Error != "" {
+		trace("%s: api ERROR: %s", conn.ID, resp.Error)
+		apiErr := errors.New(resp.Error)
+		results = append(results, WriteResult{Err: apiErr})
+		return results, apiErr
+	}
+
 	if resp.Results == nil {
-		err = errors.New("results key is missing from response")
-		trace("%s: missing results key: %s", conn.ID, err)
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
 		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
@@ -228,8 +235,13 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 		return 0, err
 	}
 
+	if resp.Error != "" {
+		trace("%s: api ERROR: %s", conn.ID, resp.Error)
+		return 0, errors.New(resp.Error)
+	}
+
 	if resp.SequenceNumber == nil {
-		return 0, errors.New("sequence_number missing from response")
+		return 0, errors.New("gorqlite: sequence_number is missing from response")
 	}
 	return *resp.SequenceNumber, nil
 }

@@ -93,8 +93,8 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 	}
 
 	if resp.Results == nil {
-		err = errors.New("result key is missing from response")
-		trace("%s: missing results key: %s", conn.ID, err)
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
 		results = append(results, RequestResult{Err: err})
 		return results, err
 	}

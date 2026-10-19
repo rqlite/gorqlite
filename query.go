@@ -73,6 +73,12 @@ type responseJSON struct {
 	SequenceNumber *int64       `json:"sequence_number,omitempty"`
 }
 
+// errMissingResults is returned when a 200 response carries neither
+// a top-level error nor a results array. rqlite always sends one of
+// the two, so its absence means we're not talking to rqlite, or a
+// proxy mangled the body.
+var errMissingResults = errors.New("gorqlite: results key is missing from response")
+
 // QueryOne wraps Query into a single-statement method.
 //
 // QueryOne uses context.Background() internally; to specify the context, use QueryOneContext.
@@ -198,6 +204,12 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 		return results, apiErr
 	}
 
+	if resp.Results == nil {
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
+		results = append(results, QueryResult{Err: err})
+		return results, err
+	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resp.Results))
 
 	var errs []error

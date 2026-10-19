@@ -40,9 +40,9 @@ func newFakeServer(t *testing.T, dbHandler http.HandlerFunc) *fakeServer {
 
 func TestQueryDoesNotPanicOnUnexpectedJSON(t *testing.T) {
 	bodies := []string{
-		`{}`,                    // no results, no error
-		`{"results":[]}`,        // empty array
-		`{"results":[{}]}`,      // empty result object
+		`{}`,               // no results, no error
+		`{"results":[]}`,   // empty array
+		`{"results":[{}]}`, // empty result object
 		`{"results":[{"columns":null,"types":null,"values":null}]}`,
 		`{"error":"server says no"}`,
 		`not json at all`,
@@ -198,4 +198,86 @@ func TestPeerRetrySkippedAfterCtxDone(t *testing.T) {
 
 func contains(s, sub string) bool {
 	return strings.Contains(s, sub)
+}
+
+// TestTopLevelErrorIsSurfaced pins that every statement-executing
+// method reports a top-level "error" in a 200 response, rather than
+// masking it behind a missing-results or missing-sequence error.
+func TestTopLevelErrorIsSurfaced(t *testing.T) {
+	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"error":"server says no"}`))
+	})
+
+	conn, err := gorqlite.Open(srv.URL + "?disableClusterDiscovery=true")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	calls := map[string]func() error{
+		"Query": func() error {
+			_, err := conn.QueryOne("SELECT 1")
+			return err
+		},
+		"Write": func() error {
+			_, err := conn.WriteOne("INSERT INTO x VALUES (1)")
+			return err
+		},
+		"Queue": func() error {
+			_, err := conn.QueueOne("INSERT INTO x VALUES (1)")
+			return err
+		},
+		"Request": func() error {
+			_, err := conn.Request([]string{"SELECT 1"})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			err := call()
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if err.Error() != "server says no" {
+				t.Errorf("got %q, want the server's error verbatim", err)
+			}
+		})
+	}
+}
+
+// TestMissingResultsIsError pins that a 200 response with neither an
+// error nor a results array is reported as an error by Query, Write
+// and Request alike, instead of being treated as zero results.
+func TestMissingResultsIsError(t *testing.T) {
+	srv := newFakeServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{}`))
+	})
+
+	conn, err := gorqlite.Open(srv.URL + "?disableClusterDiscovery=true")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer conn.Close()
+
+	calls := map[string]func() error{
+		"Query": func() error {
+			_, err := conn.QueryOne("SELECT 1")
+			return err
+		},
+		"Write": func() error {
+			_, err := conn.WriteOne("INSERT INTO x VALUES (1)")
+			return err
+		},
+		"Request": func() error {
+			_, err := conn.Request([]string{"SELECT 1"})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			if err := call(); err == nil {
+				t.Error("expected error for missing results key, got nil")
+			}
+		})
+	}
 }
