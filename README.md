@@ -25,7 +25,6 @@ Used in production by various groups, including [Replicated](https://www.replica
 - No external dependencies — standard library only.
 
 ## Install
-
 ```sh
 go get github.com/rqlite/gorqlite
 ```
