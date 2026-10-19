@@ -299,3 +299,57 @@ func TestInitConnectionDefaults(t *testing.T) {
 		t.Errorf("default timeout: got %v, want %d", conn.client.Timeout, defaultTimeout)
 	}
 }
+
+// TestZeroQueryResultIsSafe pins that a zero-value QueryResult, which
+// is what callers get from QueryOne on an API error or an empty
+// response, can have its accessors called without panicking.
+func TestZeroQueryResultIsSafe(t *testing.T) {
+	for name, qr := range map[string]QueryResult{
+		"zero value":   {},
+		"error result": {Err: errors.New("boom")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if qr.Next() {
+				t.Error("Next on empty result should be false")
+			}
+			if qr.NumRows() != 0 {
+				t.Errorf("NumRows: got %d, want 0", qr.NumRows())
+			}
+			if _, err := qr.Map(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Map: got %v, want errCallNextFirst", err)
+			}
+			if _, err := qr.Slice(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Slice: got %v, want errCallNextFirst", err)
+			}
+			if err := qr.Scan(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Scan: got %v, want errCallNextFirst", err)
+			}
+			if got := qr.Columns(); len(got) != 0 {
+				t.Errorf("Columns: got %v, want empty", got)
+			}
+		})
+	}
+}
+
+// TestQueryResultAccessAfterExhaustion pins that Map/Slice/Scan refuse
+// to index past the last row once Next has returned false.
+func TestQueryResultAccessAfterExhaustion(t *testing.T) {
+	qr := &QueryResult{
+		conn:      &Connection{ID: "test"},
+		columns:   []string{"a"},
+		types:     []string{"text"},
+		values:    [][]interface{}{{"x"}},
+		rowNumber: -1,
+	}
+	if !qr.Next() {
+		t.Fatal("expected one row")
+	}
+	if qr.Next() {
+		t.Fatal("expected exhaustion after one row")
+	}
+	// Still positioned on the last row, so access must keep working.
+	var a string
+	if err := qr.Scan(&a); err != nil || a != "x" {
+		t.Errorf("Scan after exhaustion: got %q, %v", a, err)
+	}
+}
