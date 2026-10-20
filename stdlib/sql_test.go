@@ -3,11 +3,14 @@ package stdlib
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/rqlite/gorqlite"
 )
 
 var globalDB *sql.DB
@@ -176,4 +179,59 @@ func TestTable(t *testing.T) {
 			t.Errorf("expected error for invalid query, got nil")
 		}
 	})
+}
+
+// TestStatementErrorThroughDatabaseSQL checks that a statement failure
+// reaches database/sql callers as a *gorqlite.StatementError, so they
+// can inspect the SQLite result codes with errors.As.
+func TestStatementErrorThroughDatabaseSQL(t *testing.T) {
+	table := testTableName() + "_errors"
+
+	if _, err := globalDB.Exec("CREATE TABLE " + table + " (id INTEGER PRIMARY KEY)"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := globalDB.Exec("DROP TABLE " + table); err != nil {
+			t.Errorf("dropping table: %v", err)
+		}
+	})
+
+	for _, method := range []string{"Exec", "Query"} {
+		t.Run(method, func(t *testing.T) {
+			if _, err := globalDB.Exec("INSERT INTO " + table + " (id) VALUES (1)"); err != nil {
+				t.Fatalf("first insert: %v", err)
+			}
+			t.Cleanup(func() {
+				if _, err := globalDB.Exec("DELETE FROM " + table); err != nil {
+					t.Errorf("clearing table: %v", err)
+				}
+			})
+
+			var err error
+			switch method {
+			case "Exec":
+				_, err = globalDB.Exec("INSERT INTO " + table + " (id) VALUES (1)")
+			case "Query":
+				var rows *sql.Rows
+				rows, err = globalDB.Query("SELECT * FROM " + table + "_missing")
+				if rows != nil {
+					rows.Close()
+				}
+			}
+			if err == nil {
+				t.Fatal("expected a statement error, got nil")
+			}
+
+			var se *gorqlite.StatementError
+			if !errors.As(err, &se) {
+				t.Fatalf("errors.As(%T %q) did not find a *StatementError", err, err)
+			}
+			if se.SQLite == nil {
+				t.Skipf("server reports no SQLite codes (pre-v10.6.0?): %v", se)
+			}
+			if se.SQLite.Code == 0 {
+				t.Errorf("got zero SQLite code in %+v", *se.SQLite)
+			}
+		})
+	}
 }
