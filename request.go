@@ -27,14 +27,7 @@ func (conn *Connection) Request(sqlStatements []string) (results []RequestResult
 //
 // To use RequestContext with parameterized queries, use RequestParameterizedContext.
 func (conn *Connection) RequestContext(ctx context.Context, sqlStatements []string) (results []RequestResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.RequestParameterizedContext(ctx, parameterizedStatements)
+	return conn.RequestParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // RequestParameterized is used to access Unified Endpoint to send read and writes requests in one operation.
@@ -70,7 +63,7 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 	trace("%s: Request() for %d statements", conn.ID, len(sqlStatements))
 
 	before := time.Now()
-	response, err := conn.rqliteApiPost(ctx, api_REQUEST, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiRequest, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, RequestResult{Err: err})
@@ -93,8 +86,8 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 	}
 
 	if resp.Results == nil {
-		err = errors.New("result key is missing from response")
-		trace("%s: missing results key: %s", conn.ID, err)
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
 		results = append(results, RequestResult{Err: err})
 		return results, err
 	}

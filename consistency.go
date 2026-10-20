@@ -10,12 +10,12 @@ const (
 	// ConsistencyLevelWeak provides a weak consistency that guarantees the
 	// queries are sent to the leader.
 	ConsistencyLevelWeak
-	// ConsitencyLevelLinearizable provides a linearizable consistency and
+	// ConsistencyLevelLinearizable provides a linearizable consistency and
 	// guarantees that read result will reflect all previous writes.
 	ConsistencyLevelLinearizable
 	// ConsistencyLevelStrong provides a strong consistency and guarantees
 	// that the read result will reflect all previous writes and that all
-	// previously commmitted writes in the Raft log have been applied..
+	// previously committed writes in the Raft log have been applied.
 	ConsistencyLevelStrong
 )
 

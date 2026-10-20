@@ -17,9 +17,20 @@ type ParameterizedStatement struct {
 	Arguments []interface{}
 }
 
+// toParameterizedStatements wraps plain SQL strings as argument-less
+// ParameterizedStatements, so the string-taking methods can share the
+// parameterized implementations.
+func toParameterizedStatements(sqlStatements []string) []ParameterizedStatement {
+	out := make([]ParameterizedStatement, 0, len(sqlStatements))
+	for _, sqlStatement := range sqlStatements {
+		out = append(out, ParameterizedStatement{Query: sqlStatement})
+	}
+	return out
+}
+
 // rqliteApiCall executes one HTTP request, retrying against each
-// known peer in turn. Returns the body of the first 2xx response, or
-// a combined error listing every peer's failure.
+// known peer in turn. Returns the body of the first 200 OK response,
+// or a combined error listing every peer's failure.
 //
 // If the supplied context is already done before or between attempts,
 // the call short-circuits and returns ctx.Err(): walking the rest of
@@ -52,7 +63,7 @@ func (conn *Connection) rqliteApiCall(ctx context.Context, apiOp apiOperation, m
 	var builder strings.Builder
 	builder.WriteString("tried all peers unsuccessfully. here are the results:\n")
 	for n, v := range failureLog {
-		builder.WriteString(fmt.Sprintf("   peer #%d: %s\n", n, v))
+		fmt.Fprintf(&builder, "   peer #%d: %s\n", n, v)
 	}
 	return nil, errors.New(builder.String())
 }
@@ -110,7 +121,7 @@ func redactURL(url string) string {
 func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([]byte, error) {
 	trace("%s: rqliteApiGet() called", conn.ID)
 
-	if apiOp != api_STATUS && apiOp != api_NODES {
+	if apiOp != apiStatus && apiOp != apiNodes {
 		return nil, errors.New("rqliteApiGet() called for invalid api operation")
 	}
 
@@ -121,7 +132,7 @@ func (conn *Connection) rqliteApiGet(ctx context.Context, apiOp apiOperation) ([
 // It serialises the parameterized statements into rqlite's
 // nested-array body format.
 func (conn *Connection) rqliteApiPost(ctx context.Context, apiOp apiOperation, sqlStatements []ParameterizedStatement) ([]byte, error) {
-	if apiOp != api_QUERY && apiOp != api_WRITE && apiOp != api_WRITE_QUEUED && apiOp != api_REQUEST {
+	if apiOp != apiQuery && apiOp != apiWrite && apiOp != apiWriteQueued && apiOp != apiRequest {
 		return nil, errors.New("rqliteApiPost() called for invalid api operation")
 	}
 

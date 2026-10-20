@@ -1,8 +1,7 @@
 package integration
 
 import (
-	_ "embed"
-	"io/ioutil"
+	"os"
 	"sort"
 	"testing"
 
@@ -10,13 +9,13 @@ import (
 )
 
 func TestEnableClusterDiscovery(t *testing.T) {
-	clusterStatus, err := ioutil.ReadFile("assets/three_node_cluster_status.json")
+	clusterStatus, err := os.ReadFile("assets/three_node_cluster_status.json")
 	if err != nil {
-		t.Errorf("failed to read cluster statu json files: %v", err)
+		t.Errorf("failed to read cluster status json files: %v", err)
 		return
 	}
 
-	clusterNodes, err := ioutil.ReadFile("assets/three_node_cluster_nodes.json")
+	clusterNodes, err := os.ReadFile("assets/three_node_cluster_nodes.json")
 	if err != nil {
 		t.Errorf("failed to read cluster nodes json files: %v", err)
 		return

@@ -3,6 +3,7 @@ package gorqlite
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -195,7 +196,7 @@ func TestAssembleURL_EmptyPasswordKeepsUsername(t *testing.T) {
 		password:         "",
 		consistencyLevel: ConsistencyLevelWeak,
 	}
-	url := conn.assembleURL(api_QUERY, peer("host:1234"))
+	url := conn.assembleURL(apiQuery, peer("host:1234"))
 	// url.Redacted masks anything after `user:`, so we look for "alice@"
 	// being present (with or without colon) by parsing.
 	if !contains(url, "alice@") && !contains(url, "alice:@") {
@@ -210,7 +211,7 @@ func TestAssembleURL_SpecialCharsInPasswordEscaped(t *testing.T) {
 		password:         "p@ss/word",
 		consistencyLevel: ConsistencyLevelWeak,
 	}
-	url := conn.assembleURL(api_QUERY, peer("host:1234"))
+	url := conn.assembleURL(apiQuery, peer("host:1234"))
 	// Plain "p@ss/word" should NOT appear unescaped.
 	if contains(url, "p@ss/word") {
 		t.Errorf("password not escaped in URL: %q", url)
@@ -223,7 +224,7 @@ func TestAssembleURL_QueueOpAddsQueueParam(t *testing.T) {
 		consistencyLevel:  ConsistencyLevelWeak,
 		wantsTransactions: false,
 	}
-	url := conn.assembleURL(api_WRITE_QUEUED, peer("host:1234"))
+	url := conn.assembleURL(apiWriteQueued, peer("host:1234"))
 	if !contains(url, "&queue") {
 		t.Errorf("expected &queue in queued-write URL, got %q", url)
 	}
@@ -235,7 +236,7 @@ func TestAssembleURL_NormalWriteHasNoQueueParam(t *testing.T) {
 		consistencyLevel:  ConsistencyLevelWeak,
 		wantsTransactions: false,
 	}
-	url := conn.assembleURL(api_WRITE, peer("host:1234"))
+	url := conn.assembleURL(apiWrite, peer("host:1234"))
 	if contains(url, "queue") {
 		t.Errorf("normal write should not carry queue param, got %q", url)
 	}
@@ -297,5 +298,126 @@ func TestInitConnectionDefaults(t *testing.T) {
 	}
 	if conn.client.Timeout != defaultTimeout*time.Second {
 		t.Errorf("default timeout: got %v, want %d", conn.client.Timeout, defaultTimeout)
+	}
+}
+
+// TestZeroQueryResultIsSafe pins that a zero-value QueryResult, which
+// is what callers get from QueryOne on an API error or an empty
+// response, can have its accessors called without panicking.
+func TestZeroQueryResultIsSafe(t *testing.T) {
+	for name, qr := range map[string]QueryResult{
+		"zero value":   {},
+		"error result": {Err: errors.New("boom")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if qr.Next() {
+				t.Error("Next on empty result should be false")
+			}
+			if qr.NumRows() != 0 {
+				t.Errorf("NumRows: got %d, want 0", qr.NumRows())
+			}
+			if _, err := qr.Map(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Map: got %v, want errCallNextFirst", err)
+			}
+			if _, err := qr.Slice(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Slice: got %v, want errCallNextFirst", err)
+			}
+			if err := qr.Scan(); !errors.Is(err, errCallNextFirst) {
+				t.Errorf("Scan: got %v, want errCallNextFirst", err)
+			}
+			if got := qr.Columns(); len(got) != 0 {
+				t.Errorf("Columns: got %v, want empty", got)
+			}
+		})
+	}
+}
+
+// TestQueryResultAccessAfterExhaustion pins that Map/Slice/Scan refuse
+// to index past the last row once Next has returned false.
+func TestQueryResultAccessAfterExhaustion(t *testing.T) {
+	qr := &QueryResult{
+		conn:      &Connection{ID: "test"},
+		columns:   []string{"a"},
+		types:     []string{"text"},
+		values:    [][]interface{}{{"x"}},
+		rowNumber: -1,
+	}
+	if !qr.Next() {
+		t.Fatal("expected one row")
+	}
+	if qr.Next() {
+		t.Fatal("expected exhaustion after one row")
+	}
+	// Still positioned on the last row, so access must keep working.
+	var a string
+	if err := qr.Scan(&a); err != nil || a != "x" {
+		t.Errorf("Scan after exhaustion: got %q, %v", a, err)
+	}
+}
+
+// TestInitConnectionTimeoutOption pins that the timeout URL option
+// actually takes effect: Open passed DefaultHTTPClient for a while,
+// which meant the option was parsed and then discarded.
+func TestInitConnectionTimeoutOption(t *testing.T) {
+	t.Run("no option uses default client", func(t *testing.T) {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://", nil); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client != DefaultHTTPClient {
+			t.Error("expected DefaultHTTPClient to be used")
+		}
+	})
+
+	t.Run("option creates dedicated client", func(t *testing.T) {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://?timeout=3", nil); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client == DefaultHTTPClient {
+			t.Fatal("expected a dedicated client, got DefaultHTTPClient")
+		}
+		if conn.client.Timeout != 3*time.Second {
+			t.Errorf("timeout: got %v, want 3s", conn.client.Timeout)
+		}
+	})
+
+	t.Run("supplied client wins over option", func(t *testing.T) {
+		custom := &http.Client{Timeout: 7 * time.Second}
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection("http://?timeout=3", custom); err != nil {
+			t.Fatalf("initConnection: %v", err)
+		}
+		if conn.client != custom {
+			t.Error("expected the supplied client to be retained")
+		}
+		if conn.client.Timeout != 7*time.Second {
+			t.Errorf("timeout: got %v, want 7s", conn.client.Timeout)
+		}
+	})
+}
+
+// TestInitConnectionRejectsBadScheme pins that only http and https
+// are accepted. The old prefix check let "httpx://" and friends
+// through and silently treated them as plain http.
+func TestInitConnectionRejectsBadScheme(t *testing.T) {
+	for _, url := range []string{"", "localhost:4001", "ftp://localhost:4001", "httpx://localhost:4001"} {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection(url, nil); err == nil {
+			t.Errorf("%q: expected error, got nil", url)
+		}
+	}
+	for _, url := range []string{"http://", "https://host:1", "HTTP://host:1"} {
+		conn := &Connection{ID: "test"}
+		if err := conn.initConnection(url, nil); err != nil {
+			t.Errorf("%q: unexpected error: %v", url, err)
+		}
+	}
+	conn := &Connection{ID: "test"}
+	if err := conn.initConnection("https://host:1", nil); err != nil {
+		t.Fatalf("initConnection: %v", err)
+	}
+	if !conn.wantsHTTPS {
+		t.Error("https scheme should set wantsHTTPS")
 	}
 }

@@ -36,19 +36,19 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 	}
 
 	switch apiOp {
-	case api_STATUS:
+	case apiStatus:
 		u.Path = "/status"
-	case api_NODES:
+	case apiNodes:
 		u.Path = "/nodes"
-	case api_QUERY:
+	case apiQuery:
 		u.Path = "/db/query"
-	case api_WRITE, api_WRITE_QUEUED:
+	case apiWrite, apiWriteQueued:
 		u.Path = "/db/execute"
-	case api_REQUEST:
+	case apiRequest:
 		u.Path = "/db/request"
 	}
 
-	if apiOp == api_QUERY || apiOp == api_WRITE || apiOp == api_WRITE_QUEUED || apiOp == api_REQUEST {
+	if apiOp == apiQuery || apiOp == apiWrite || apiOp == apiWriteQueued || apiOp == apiRequest {
 		// rqlite accepts bare flag-style params like ?timings & ?queue,
 		// not key=value. Build the raw query directly to preserve that
 		// shape; the level value is always one of a small fixed set so
@@ -57,7 +57,7 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 		if conn.getWantsTransactions() {
 			q += "&transaction"
 		}
-		if apiOp == api_WRITE_QUEUED {
+		if apiOp == apiWriteQueued {
 			q += "&queue"
 		}
 		u.RawQuery = q
@@ -70,18 +70,18 @@ func (conn *Connection) assembleURL(apiOp apiOperation, p peer) string {
 
 func apiOpName(op apiOperation) string {
 	switch op {
-	case api_QUERY:
-		return "api_QUERY"
-	case api_STATUS:
-		return "api_STATUS"
-	case api_NODES:
-		return "api_NODES"
-	case api_WRITE:
-		return "api_WRITE"
-	case api_WRITE_QUEUED:
-		return "api_WRITE_QUEUED"
-	case api_REQUEST:
-		return "api_REQUEST"
+	case apiQuery:
+		return "apiQuery"
+	case apiStatus:
+		return "apiStatus"
+	case apiNodes:
+		return "apiNodes"
+	case apiWrite:
+		return "apiWrite"
+	case apiWriteQueued:
+		return "apiWriteQueued"
+	case apiRequest:
+		return "apiRequest"
 	}
 	return fmt.Sprintf("apiOperation(%d)", op)
 }
@@ -113,7 +113,7 @@ func (conn *Connection) updateClusterInfo() error {
 
 	rc := rqliteCluster{}
 
-	responseBody, err := conn.rqliteApiGet(context.Background(), api_STATUS)
+	responseBody, err := conn.rqliteApiGet(context.Background(), apiStatus)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (conn *Connection) updateClusterInfo() error {
 	if rc.leader == "" {
 		// 6.0+: fall back to /nodes for the api address.
 		trace("metadata didn't carry an api_addr; falling back to /nodes")
-		responseBody, err := conn.rqliteApiGet(context.Background(), api_NODES)
+		responseBody, err := conn.rqliteApiGet(context.Background(), apiNodes)
 		if err != nil {
 			return fmt.Errorf("could not determine leader from /nodes call: %w", err)
 		}

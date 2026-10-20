@@ -1,19 +1,14 @@
-// Package gorqlite provieds a database/sql-like driver for rqlite,
-// the distributed consistent sqlite.
+// Package gorqlite provides a database/sql-like client for rqlite,
+// the lightweight, distributed relational database built on SQLite.
 //
 // Copyright (c)2016 andrew fabbro (andrew@fabbro.org)
 //
-// See LICENSE.md for license. tl;dr: MIT. Conveniently, the same license as rqlite.
+// See LICENSE for license. tl;dr: MIT. Conveniently, the same license as rqlite.
 //
-// Project home page: https://github.com/raindo308/gorqlite
+// Project home page: https://github.com/rqlite/gorqlite
 //
 // Learn more about rqlite at: https://github.com/rqlite/rqlite
 package gorqlite
-
-// this file contains package-level stuff:
-//   consts
-//   init()
-//   Open, TraceOn(), TraceOff()
 
 import (
 	"crypto/rand"
@@ -27,12 +22,12 @@ import (
 type apiOperation int
 
 const (
-	api_QUERY apiOperation = iota
-	api_STATUS
-	api_WRITE
-	api_WRITE_QUEUED
-	api_NODES
-	api_REQUEST
+	apiQuery apiOperation = iota
+	apiStatus
+	apiWrite
+	apiWriteQueued
+	apiNodes
+	apiRequest
 )
 
 func init() {
@@ -40,7 +35,8 @@ func init() {
 }
 
 // Open creates and returns a "connection" to rqlite, using
-// the default HTTP client.
+// DefaultHTTPClient, or a dedicated client when the URL carries a
+// timeout option.
 //
 // Since rqlite is stateless, there is no actual connection.
 // Open() creates and initializes a gorqlite Connection type,
@@ -59,13 +55,17 @@ func init() {
 //	https://mary:secret2@somewhere.example.com:1234
 //	https://mary:secret2@somewhere.example.com // will use 4001
 func Open(connURL string) (*Connection, error) {
-	return OpenWithClient(connURL, DefaultHTTPClient)
+	return OpenWithClient(connURL, nil)
 }
 
 // OpenWithClient creates and returns a "connection" to rqlite,
 // and uses the given HTTP client for all connections to rqlite.
-// This allows clients to have complete conntrol over the HTTP
+// This allows clients to have complete control over the HTTP
 // communications between this client and the rqlite system.
+//
+// The supplied client is used as-is, so any timeout option in the
+// URL is ignored in favour of the client's own Timeout. A nil client
+// makes OpenWithClient behave exactly like Open.
 func OpenWithClient(connURL string, client *http.Client) (*Connection, error) {
 	conn := &Connection{}
 

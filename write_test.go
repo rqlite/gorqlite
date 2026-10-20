@@ -223,9 +223,14 @@ func TestQueueOneParameterized(t *testing.T) {
 		if err != nil {
 			t.Errorf("failed during dropping table: %s", err.Error())
 		}
+		// Queued writes are applied asynchronously. The queue is
+		// FIFO, so once the DROP has landed every earlier queued
+		// statement has too, and the next test can safely recreate
+		// the table.
+		waitForTableGone(t, testTableName())
 	})
 
-	t.Run("QueryOneParameterized INSERT", func(t *testing.T) {
+	t.Run("QueueOneParameterized INSERT", func(t *testing.T) {
 		seq, err := globalConnection.QueueOneParameterized(gorqlite.ParameterizedStatement{
 			Query: fmt.Sprintf("INSERT INTO %s (id, name) VALUES ( 1, 'aaa bbb ccc' )", testTableName()),
 		})
@@ -351,4 +356,28 @@ func TestWriteParameterized(t *testing.T) {
 			t.Errorf("expected 4 results, got %d", len(results))
 		}
 	})
+}
+
+// waitForTableGone polls until the named table no longer exists, or
+// fails the test after a few seconds. Use it after queuing a DROP so
+// a later test does not race against rqlite applying the queue.
+func waitForTableGone(t *testing.T, table string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		qr, err := globalConnection.QueryOneParameterized(gorqlite.ParameterizedStatement{
+			Query:     "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+			Arguments: []interface{}{table},
+		})
+		if err != nil {
+			t.Fatalf("checking for table %s: %v", table, err)
+		}
+		if qr.NumRows() == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("table %s still exists after queued DROP", table)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

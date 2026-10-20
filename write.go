@@ -56,14 +56,7 @@ func (conn *Connection) Write(sqlStatements []string) (results []WriteResult, er
 //
 // To use WriteContext with parameterized queries, use WriteParameterizedContext.
 func (conn *Connection) WriteContext(ctx context.Context, sqlStatements []string) (results []WriteResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.WriteParameterizedContext(ctx, parameterizedStatements)
+	return conn.WriteParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // WriteParameterized performs DDL/DML synchronously.
@@ -115,7 +108,7 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Write() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_WRITE, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiWrite, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, WriteResult{Err: err})
@@ -130,9 +123,16 @@ func (conn *Connection) WriteParameterizedContext(ctx context.Context, sqlStatem
 		return results, err
 	}
 
+	if resp.Error != "" {
+		trace("%s: api ERROR: %s", conn.ID, resp.Error)
+		apiErr := errors.New(resp.Error)
+		results = append(results, WriteResult{Err: apiErr})
+		return results, apiErr
+	}
+
 	if resp.Results == nil {
-		err = errors.New("results key is missing from response")
-		trace("%s: missing results key: %s", conn.ID, err)
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
 		results = append(results, WriteResult{Err: err})
 		return results, err
 	}
@@ -192,12 +192,7 @@ func (conn *Connection) Queue(sqlStatements []string) (seq int64, err error) {
 //
 // To use QueueContext with parameterized queries, use QueueParameterizedContext.
 func (conn *Connection) QueueContext(ctx context.Context, sqlStatements []string) (seq int64, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0)
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{Query: sqlStatement})
-	}
-
-	return conn.QueueParameterizedContext(ctx, parameterizedStatements)
+	return conn.QueueParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // QueueParameterized performs queued writes with parameter binding.
@@ -215,7 +210,7 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Queue() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_WRITE_QUEUED, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiWriteQueued, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		return 0, err
@@ -228,8 +223,13 @@ func (conn *Connection) QueueParameterizedContext(ctx context.Context, sqlStatem
 		return 0, err
 	}
 
+	if resp.Error != "" {
+		trace("%s: api ERROR: %s", conn.ID, resp.Error)
+		return 0, errors.New(resp.Error)
+	}
+
 	if resp.SequenceNumber == nil {
-		return 0, errors.New("sequence_number missing from response")
+		return 0, errors.New("gorqlite: sequence_number is missing from response")
 	}
 	return *resp.SequenceNumber, nil
 }

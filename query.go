@@ -73,6 +73,12 @@ type responseJSON struct {
 	SequenceNumber *int64       `json:"sequence_number,omitempty"`
 }
 
+// errMissingResults is returned when a 200 response carries neither
+// a top-level error nor a results array. rqlite always sends one of
+// the two, so its absence means we're not talking to rqlite, or a
+// proxy mangled the body.
+var errMissingResults = errors.New("gorqlite: results key is missing from response")
+
 // QueryOne wraps Query into a single-statement method.
 //
 // QueryOne uses context.Background() internally; to specify the context, use QueryOneContext.
@@ -121,14 +127,7 @@ func (conn *Connection) Query(sqlStatements []string) (results []QueryResult, er
 // QueryContext is used to perform SELECT operations in the database. It takes an array of SQL statements and
 // executes them in a single transaction, returning an array of QueryResult.
 func (conn *Connection) QueryContext(ctx context.Context, sqlStatements []string) (results []QueryResult, err error) {
-	parameterizedStatements := make([]ParameterizedStatement, 0, len(sqlStatements))
-	for _, sqlStatement := range sqlStatements {
-		parameterizedStatements = append(parameterizedStatements, ParameterizedStatement{
-			Query: sqlStatement,
-		})
-	}
-
-	return conn.QueryParameterizedContext(ctx, parameterizedStatements)
+	return conn.QueryParameterizedContext(ctx, toParameterizedStatements(sqlStatements))
 }
 
 // QueryParameterized is used to perform SELECT operations in the database.
@@ -176,7 +175,7 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 
 	trace("%s: Query() for %d statements", conn.ID, len(sqlStatements))
 
-	response, err := conn.rqliteApiPost(ctx, api_QUERY, sqlStatements)
+	response, err := conn.rqliteApiPost(ctx, apiQuery, sqlStatements)
 	if err != nil {
 		trace("%s: rqliteApiCall() ERROR: %s", conn.ID, err.Error())
 		results = append(results, QueryResult{Err: err})
@@ -198,6 +197,12 @@ func (conn *Connection) QueryParameterizedContext(ctx context.Context, sqlStatem
 		return results, apiErr
 	}
 
+	if resp.Results == nil {
+		err = errMissingResults
+		trace("%s: %s", conn.ID, err)
+		results = append(results, QueryResult{Err: err})
+		return results, err
+	}
 	trace("%s: I have %d result(s) to parse", conn.ID, len(resp.Results))
 
 	var errs []error
@@ -235,6 +240,28 @@ type QueryResult struct {
 // before the first Next, since rowNumber is otherwise out of range.
 var errCallNextFirst = errors.New("gorqlite: call Next() before Map/Slice/Scan")
 
+// connID returns the owning connection's ID for trace output, or an
+// empty string when the result was built without one. QueryResults
+// returned on error paths, and the zero value, carry no connection.
+func (qr *QueryResult) connID() string {
+	if qr.conn == nil {
+		return ""
+	}
+	return qr.conn.ID
+}
+
+// currentRow returns the row the cursor is positioned on, or
+// errCallNextFirst if the cursor is not on a valid row. The latter
+// covers both "Next not yet called" and results with no rows at all,
+// such as the zero value or an error result, where rowNumber is 0 but
+// values is empty.
+func (qr *QueryResult) currentRow() ([]interface{}, error) {
+	if qr.rowNumber < 0 || qr.rowNumber >= int64(len(qr.values)) {
+		return nil, errCallNextFirst
+	}
+	return qr.values[qr.rowNumber], nil
+}
+
 // errMalformedRow is returned when a row in the server response has
 // fewer values than the column list claims, which would otherwise
 // cause an out-of-bounds index. Real rqlite never produces these, but
@@ -253,39 +280,39 @@ func (qr *QueryResult) Columns() []string {
 // else is whatever encoding/json produced — usually float64 for
 // numbers, string for text, nil for NULL.
 func (qr *QueryResult) Map() (map[string]interface{}, error) {
-	trace("%s: Map() called for row %d", qr.conn.ID, qr.rowNumber)
-	if qr.rowNumber == -1 {
-		return nil, errCallNextFirst
+	trace("%s: Map() called for row %d", qr.connID(), qr.rowNumber)
+	row, err := qr.currentRow()
+	if err != nil {
+		return nil, err
 	}
-
-	row := qr.values[qr.rowNumber]
 	if len(row) < len(qr.columns) {
 		return nil, errMalformedRow
 	}
 
 	ans := make(map[string]interface{}, len(qr.columns))
 	for i, col := range qr.columns {
-		typ := ""
-		if i < len(qr.types) {
-			typ = qr.types[i]
+		v, err := qr.convertValue(i, row[i])
+		if err != nil {
+			return nil, err
 		}
-		switch typ {
-		case "date", "datetime":
-			if row[i] != nil {
-				t, err := toTime(row[i])
-				if err != nil {
-					return nil, err
-				}
-				ans[col] = t
-			} else {
-				ans[col] = nil
-			}
-		default:
-			ans[col] = row[i]
-		}
+		ans[col] = v
 	}
 
 	return ans, nil
+}
+
+// convertValue applies the per-column conversions Map and Slice
+// share: date and datetime columns become time.Time, everything else
+// is passed through as decoded from JSON.
+func (qr *QueryResult) convertValue(col int, v interface{}) (interface{}, error) {
+	if v == nil || col >= len(qr.types) {
+		return v, nil
+	}
+	switch qr.types[col] {
+	case "date", "datetime":
+		return toTime(v)
+	}
+	return v, nil
 }
 
 // Slice returns the current row (advanced by Next) as a []interface{}.
@@ -296,33 +323,19 @@ func (qr *QueryResult) Map() (map[string]interface{}, error) {
 // else is whatever encoding/json produced — usually float64 for
 // numbers, string for text, nil for NULL.
 func (qr *QueryResult) Slice() ([]interface{}, error) {
-	trace("%s: Slice() called", qr.conn.ID)
+	trace("%s: Slice() called", qr.connID())
 
-	if qr.rowNumber == -1 {
-		return nil, errCallNextFirst
+	row, err := qr.currentRow()
+	if err != nil {
+		return nil, err
 	}
-
-	row := qr.values[qr.rowNumber]
 	ans := make([]interface{}, len(row))
 	for i, v := range row {
-		typ := ""
-		if i < len(qr.types) {
-			typ = qr.types[i]
+		cv, err := qr.convertValue(i, v)
+		if err != nil {
+			return nil, err
 		}
-		switch typ {
-		case "date", "datetime":
-			if v != nil {
-				t, err := toTime(v)
-				if err != nil {
-					return nil, err
-				}
-				ans[i] = t
-			} else {
-				ans[i] = nil
-			}
-		default:
-			ans[i] = v
-		}
+		ans[i] = cv
 	}
 	return ans, nil
 }
@@ -392,17 +405,17 @@ func toTime(src interface{}) (time.Time, error) {
 // A NULL column is left unchanged for primitive destinations and
 // recorded as Valid=false on Null* destinations.
 func (qr *QueryResult) Scan(dest ...interface{}) error {
-	trace("%s: Scan() called for %d vars", qr.conn.ID, len(dest))
+	trace("%s: Scan() called for %d vars", qr.connID(), len(dest))
 
-	if qr.rowNumber == -1 {
-		return errCallNextFirst
+	row, err := qr.currentRow()
+	if err != nil {
+		return err
 	}
 
 	if len(dest) != len(qr.columns) {
 		return fmt.Errorf("expected %d columns but got %d vars", len(qr.columns), len(dest))
 	}
 
-	row := qr.values[qr.rowNumber]
 	if len(row) < len(dest) {
 		return errMalformedRow
 	}
@@ -432,7 +445,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				}
 				*d = i
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int col:%d type:%T val:%v", n, src, src)
 			}
@@ -449,7 +462,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				}
 				*d = i
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid int64 col:%d type:%T val:%v", n, src, src)
 			}
@@ -466,7 +479,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				}
 				*d = f
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid float64 col:%d type:%T val:%v", n, src, src)
 			}
@@ -475,7 +488,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			case string:
 				*d = src
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid string col:%d type:%T val:%v", n, src, src)
 			}
@@ -502,7 +515,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 				}
 				*d = b
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid bool col:%d type:%T val:%v", n, src, src)
 			}
@@ -513,7 +526,7 @@ func (qr *QueryResult) Scan(dest ...interface{}) error {
 			case string:
 				*d = []byte(src)
 			case nil:
-				trace("%s: skipping nil scan data for variable #%d (%s)", qr.conn.ID, n, qr.columns[n])
+				trace("%s: skipping nil scan data for variable #%d (%s)", qr.connID(), n, qr.columns[n])
 			default:
 				return fmt.Errorf("invalid []byte col:%d type:%T val:%v", n, src, src)
 			}

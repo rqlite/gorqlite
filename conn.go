@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -64,7 +63,7 @@ func (conn *Connection) Close() {
 	conn.mu.Lock()
 	conn.hasBeenClosed = true
 	conn.mu.Unlock()
-	trace("%s: %s", conn.ID, "closing connection")
+	trace("%s: closing connection", conn.ID)
 }
 
 // isClosed reports whether Close has been called. Read-locked because
@@ -113,7 +112,23 @@ func (conn *Connection) ConsistencyLevel() (string, error) {
 	if conn.isClosed() {
 		return "", ErrClosed
 	}
-	return consistencyLevelToString[conn.getConsistencyLevel()], nil
+	return conn.getConsistencyLevel().String(), nil
+}
+
+// refreshClusterInfo re-discovers the cluster topology, unless the
+// connection was opened with discovery disabled, in which case the
+// topology from the URL is kept as-is.
+func (conn *Connection) refreshClusterInfo(caller string) error {
+	if conn.disableClusterDiscovery {
+		return nil
+	}
+	trace("%s: %s(), calling updateClusterInfo()", conn.ID, caller)
+	if err := conn.updateClusterInfo(); err != nil {
+		trace("%s: %s() got error from updateClusterInfo(): %s", conn.ID, caller, err.Error())
+		return err
+	}
+	trace("%s: %s(), updateClusterInfo() OK", conn.ID, caller)
+	return nil
 }
 
 // Leader returns the current cluster leader's API address. With cluster
@@ -123,22 +138,12 @@ func (conn *Connection) Leader() (string, error) {
 	if conn.isClosed() {
 		return "", ErrClosed
 	}
-	if conn.disableClusterDiscovery {
-		conn.mu.RLock()
-		leader := string(conn.cluster.leader)
-		conn.mu.RUnlock()
-		return leader, nil
-	}
-	trace("%s: Leader(), calling updateClusterInfo()", conn.ID)
-	if err := conn.updateClusterInfo(); err != nil {
-		trace("%s: Leader() got error from updateClusterInfo(): %s", conn.ID, err.Error())
+	if err := conn.refreshClusterInfo("Leader"); err != nil {
 		return "", err
 	}
-	trace("%s: Leader(), updateClusterInfo() OK", conn.ID)
 	conn.mu.RLock()
-	leader := string(conn.cluster.leader)
-	conn.mu.RUnlock()
-	return leader, nil
+	defer conn.mu.RUnlock()
+	return string(conn.cluster.leader), nil
 }
 
 // Peers returns the current cluster peers, leader first. With cluster
@@ -148,30 +153,12 @@ func (conn *Connection) Peers() ([]string, error) {
 	if conn.isClosed() {
 		return nil, ErrClosed
 	}
-	if conn.disableClusterDiscovery {
-		conn.mu.RLock()
-		defer conn.mu.RUnlock()
-		plist := make([]string, 0, len(conn.cluster.peerList))
-		for _, p := range conn.cluster.peerList {
-			plist = append(plist, string(p))
-		}
-		return plist, nil
-	}
-
-	trace("%s: Peers(), calling updateClusterInfo()", conn.ID)
-	if err := conn.updateClusterInfo(); err != nil {
-		trace("%s: Peers() got error from updateClusterInfo(): %s", conn.ID, err.Error())
+	if err := conn.refreshClusterInfo("Peers"); err != nil {
 		return nil, err
 	}
-	trace("%s: Peers(), updateClusterInfo() OK", conn.ID)
-
-	conn.mu.RLock()
-	defer conn.mu.RUnlock()
-	plist := make([]string, 0, 1+len(conn.cluster.otherPeers))
-	if conn.cluster.leader != "" {
-		plist = append(plist, string(conn.cluster.leader))
-	}
-	for _, p := range conn.cluster.otherPeers {
+	peers := conn.snapshotPeerList()
+	plist := make([]string, 0, len(peers))
+	for _, p := range peers {
 		plist = append(plist, string(p))
 	}
 	return plist, nil
@@ -184,7 +171,7 @@ func (conn *Connection) SetConsistencyLevel(levelDesired consistencyLevel) error
 		return ErrClosed
 	}
 
-	if levelDesired < ConsistencyLevelNone || levelDesired > ConsistencyLevelStrong {
+	if _, ok := consistencyLevelToString[levelDesired]; !ok {
 		return fmt.Errorf("unknown consistency level: %d", levelDesired)
 	}
 
@@ -209,8 +196,9 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 // initConnection parses the user-supplied URL, extracts credentials
 // and options, and sets up the connection's initial state. It does
 // not contact rqlite; Open does that as a follow-up via
-// updateClusterInfo. If httpClient is nil, a fresh *http.Client with
-// the configured timeout is used.
+// updateClusterInfo. If httpClient is nil, DefaultHTTPClient is used,
+// unless the URL carries a timeout option, in which case a dedicated
+// *http.Client with that timeout is created.
 //
 // URL format:
 //
@@ -220,26 +208,23 @@ func (conn *Connection) SetExecutionWithTransaction(state bool) error {
 //
 //	level=none|weak|linearizable|strong  consistency level (default: weak)
 //	disableClusterDiscovery=true|false   skip /status discovery on Open and on Leader/Peers
-//	timeout=<seconds>                    sets the default http.Client timeout (default: 10)
+//	timeout=<seconds>                    http.Client timeout; ignored when httpClient is supplied (default: 10)
 //
 // If the URL has no host the leader defaults to localhost:4001.
 func (conn *Connection) initConnection(url string, httpClient *http.Client) error {
-	if len(url) < 7 {
-		return errors.New("url specified is impossibly short")
-	}
-
-	if !strings.HasPrefix(url, "http") {
-		return errors.New("url does not start with 'http'")
-	}
-
 	u, err := nurl.Parse(url)
 	if err != nil {
 		return err
 	}
 	trace("%s: net.url.Parse() OK", conn.ID)
 
-	if u.Scheme == "https" {
+	switch u.Scheme {
+	case "http":
+		conn.wantsHTTPS = false
+	case "https":
 		conn.wantsHTTPS = true
+	default:
+		return fmt.Errorf("url scheme must be http or https, got %q", u.Scheme)
 	}
 
 	if u.User != nil {
@@ -276,22 +261,24 @@ func (conn *Connection) initConnection(url string, httpClient *http.Client) erro
 		conn.disableClusterDiscovery = dpd
 	}
 
-	timeout := defaultTimeout
-	if v := query.Get("timeout"); v != "" {
-		customTimeout, err := strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid timeout value %q: %w", v, err)
-		}
-		timeout = customTimeout
-	}
-
 	conn.wantsTransactions = true
 
 	conn.client = httpClient
-	if conn.client == nil {
-		conn.client = &http.Client{
-			Timeout: time.Second * time.Duration(timeout),
+	if v := query.Get("timeout"); v != "" {
+		timeout, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid timeout value %q: %w", v, err)
 		}
+		if conn.client == nil {
+			conn.client = &http.Client{
+				Timeout: time.Duration(timeout) * time.Second,
+			}
+		} else {
+			trace("%s: timeout option ignored because an http.Client was supplied", conn.ID)
+		}
+	}
+	if conn.client == nil {
+		conn.client = DefaultHTTPClient
 	}
 
 	trace("%s: initConnection done:", conn.ID)
