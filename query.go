@@ -62,6 +62,25 @@ type resultJSON struct {
 	RowsAffected *int64          `json:"rows_affected,omitempty"`
 	Time         float64         `json:"time,omitempty"`
 	Error        string          `json:"error,omitempty"`
+	ErrorV2      *StatementError `json:"error_v2,omitempty"`
+}
+
+// statementError returns the error rqlite reported for this result, or
+// nil if the statement succeeded. The structured error_v2, added in
+// rqlite v10.6.0, is preferred; the deprecated error string is used when
+// the server sent only that. A server asked for errors=v2 sends no error
+// string at all, so error_v2 must be checked for the failure to be seen.
+func (r resultJSON) statementError() error {
+	switch {
+	case r.ErrorV2 != nil:
+		if r.ErrorV2.Message == "" {
+			r.ErrorV2.Message = r.Error
+		}
+		return r.ErrorV2
+	case r.Error != "":
+		return &StatementError{Message: r.Error}
+	}
+	return nil
 }
 
 // responseJSON is the top-level shape returned by /db/query,
@@ -147,9 +166,9 @@ func (conn *Connection) parseQueryResult(r resultJSON) QueryResult {
 	qr.rowNumber = -1
 	qr.Timing = r.Time
 
-	if r.Error != "" {
-		trace("%s: have an error on this result: %s", conn.ID, r.Error)
-		qr.Err = errors.New(r.Error)
+	if err := r.statementError(); err != nil {
+		trace("%s: have an error on this result: %s", conn.ID, err)
+		qr.Err = err
 		return qr
 	}
 

@@ -82,9 +82,9 @@ func (conn *Connection) parseWriteResult(r resultJSON) WriteResult {
 	wr.conn = conn
 	wr.Timing = r.Time
 
-	if r.Error != "" {
-		trace("%s: have an error on this result: %s", conn.ID, r.Error)
-		wr.Err = errors.New(r.Error)
+	if err := r.statementError(); err != nil {
+		trace("%s: have an error on this result: %s", conn.ID, err)
+		wr.Err = err
 		return wr
 	}
 	if r.LastInsertID != nil {

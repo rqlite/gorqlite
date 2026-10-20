@@ -142,6 +142,21 @@ seq, err := conn.QueueOne("INSERT INTO secret_agents(id, name) VALUES (1, 'Q')")
 seq, err  = conn.Queue([]string{ /* ... */ })
 ```
 
+### Statement errors
+
+A method such as `Write` or `Query` returns an error if any statement in the batch fails, and each failed result's `Err` holds that statement's error as a `*gorqlite.StatementError`. It carries the server's message and, for failures inside SQLite, the [SQLite result codes](https://www.sqlite.org/rescode.html). The batch error wraps the per-statement errors, so `errors.As` finds them from either:
+
+```go
+_, err := conn.WriteOne("INSERT INTO secret_agents(id, name) VALUES (1, 'Q')")
+
+var se *gorqlite.StatementError
+if errors.As(err, &se) && se.SQLite != nil && se.SQLite.Code == 19 {
+    fmt.Printf("constraint violation (%d): %s\n", se.SQLite.ExtendedCode, se.Message)
+}
+```
+
+`SQLite` is nil for failures that didn't come from SQLite, such as a timeout, and when the server is older than rqlite v10.6.0. Errors from `database/sql` unwrap the same way.
+
 ### Nullable types
 
 ```go
