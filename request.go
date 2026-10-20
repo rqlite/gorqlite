@@ -97,10 +97,11 @@ func (conn *Connection) RequestParameterizedContext(ctx context.Context, sqlStat
 		trace("%s: parsing result %d", conn.ID, n)
 		var thisR RequestResult
 
-		if r.Error != "" {
-			thisR.Err = errors.New(r.Error)
+		if err := r.statementError(); err != nil {
+			trace("%s: have an error on this result: %s", conn.ID, err)
+			thisR.Err = err
 			results = append(results, thisR)
-			errs = append(errs, thisR.Err)
+			errs = append(errs, err)
 			continue
 		}
 

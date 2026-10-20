@@ -2,6 +2,7 @@ package gorqlite_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -379,5 +380,45 @@ func waitForTableGone(t *testing.T, table string) {
 			t.Fatalf("table %s still exists after queued DROP", table)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestWriteConstraintViolationReportsSQLiteCodes checks, against a live
+// rqlite, that a failed statement's Err carries the SQLite result codes
+// the server reports in error_v2.
+func TestWriteConstraintViolationReportsSQLiteCodes(t *testing.T) {
+	conn := globalConnection
+	table := testTableName()
+
+	wr, err := conn.WriteOne(fmt.Sprintf("CREATE TABLE %s (id INTEGER PRIMARY KEY, name TEXT)", table))
+	if err != nil {
+		t.Fatalf("creating table: %s - %v", err.Error(), wr.Err)
+	}
+	t.Cleanup(func() {
+		if _, err := conn.WriteOne(fmt.Sprintf("DROP TABLE %s", table)); err != nil {
+			t.Errorf("dropping table: %s", err.Error())
+		}
+	})
+
+	insert := fmt.Sprintf("INSERT INTO %s (id, name) VALUES (1, 'a')", table)
+	if _, err := conn.WriteOne(insert); err != nil {
+		t.Fatalf("first insert: %s", err.Error())
+	}
+
+	wr, err = conn.WriteOne(insert)
+	if err == nil || wr.Err == nil {
+		t.Fatalf("duplicate insert: err=%v, wr.Err=%v, want both set", err, wr.Err)
+	}
+
+	var se *gorqlite.StatementError
+	if !errors.As(err, &se) {
+		t.Fatalf("errors.As(%T) did not find a *StatementError", err)
+	}
+	if se.SQLite == nil {
+		t.Skipf("server reports no SQLite codes (pre-v10.6.0?): %v", se)
+	}
+	// SQLITE_CONSTRAINT / SQLITE_CONSTRAINT_PRIMARYKEY.
+	if se.SQLite.Code != 19 || se.SQLite.ExtendedCode != 1555 {
+		t.Errorf("got code %d/%d, want 19/1555", se.SQLite.Code, se.SQLite.ExtendedCode)
 	}
 }
